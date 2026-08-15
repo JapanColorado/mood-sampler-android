@@ -1,6 +1,5 @@
 package com.russellwhite.moodsampler.scheduling
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -46,7 +45,7 @@ class PromptNotifier(private val context: Context) {
             .setAutoCancel(true)
             // UI auto-dismiss only; the expiry ALARM is what records the miss.
             .setTimeoutAfter(expiryMinutes * 60_000L)
-            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .build()
 
         try {
