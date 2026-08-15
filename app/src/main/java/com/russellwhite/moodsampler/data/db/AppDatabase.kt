@@ -43,7 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
                     labels.forEachIndexed { index, label ->
                         db.execSQL(
                             "INSERT INTO category (type, label, sortOrder, isArchived) VALUES (?, ?, ?, 0)",
-                            arrayOf(type.name, label, index + 1),
+                            arrayOf<Any>(type.name, label, index + 1),
                         )
                     }
                 }
