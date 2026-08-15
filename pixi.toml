@@ -1,0 +1,20 @@
+[workspace]
+name = "random-experience-polling-app"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+# Bootstrap/fallback runner only; builds use ./gradlew (wrapper pins 8.11.1).
+gradle = ">=8.11"
+
+[tasks]
+bootstrap = "gradle wrapper --gradle-version 8.11.1 --distribution-type bin"
+build = "./gradlew assembleDebug"
+install = "./gradlew installDebug"
+test = "./gradlew testDebugUnitTest"
+connected-test = "./gradlew connectedDebugAndroidTest"
+lint = "./gradlew lintDebug"
+clean = "./gradlew clean"
+run = "./gradlew installDebug && adb shell am start -n com.russellwhite.moodsampler.debug/com.russellwhite.moodsampler.MainActivity"
+alarms = "adb shell dumpsys alarm | grep -B2 -A6 moodsampler"
+logs = "adb logcat -s MoodSampler:*"
