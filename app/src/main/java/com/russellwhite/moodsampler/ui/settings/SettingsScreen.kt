@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
+import com.russellwhite.moodsampler.data.settings.AppSettings
 import java.time.LocalTime
 
 @Composable
@@ -78,6 +79,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
                     label = "Day ends",
                     minutes = settings.dayEndMinutes,
                     onChange = viewModel::setDayEnd,
+                    nextDay = settings.toSamplingConfig().wrapsPastMidnight,
+                )
+                Text(
+                    spanDescription(settings),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Stepper(
                     label = "Prompt expires after (min)",
@@ -179,14 +186,42 @@ private fun Stepper(label: String, value: Int, onChange: (Int) -> Unit, range: I
     }
 }
 
+/**
+ * Human-readable span, including the past-midnight case an end time before the
+ * start time implies (09:00–01:00 is a 16-hour day ending in the small hours).
+ */
+private fun spanDescription(settings: AppSettings): String {
+    val config = settings.toSamplingConfig()
+    val hours = config.spanMinutes / 60
+    val minutes = config.spanMinutes % 60
+    val length = buildString {
+        if (hours > 0) append("${hours}h")
+        if (minutes > 0) append(if (hours > 0) " ${minutes}m" else "${minutes}m")
+    }
+    return when {
+        config.spanMinutes == 24 * 60 ->
+            "Start and end match, so prompts run around the clock."
+        config.wrapsPastMidnight ->
+            "Ends after midnight: a $length day, and prompts up to " +
+                "${config.dayEnd} count toward the day that started them."
+        else -> "A $length day."
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeSettingRow(label: String, minutes: Int, onChange: (Int) -> Unit) {
+private fun TimeSettingRow(
+    label: String,
+    minutes: Int,
+    onChange: (Int) -> Unit,
+    nextDay: Boolean = false,
+) {
     var showPicker by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         OutlinedButton(onClick = { showPicker = true }) {
-            Text(LocalTime.ofSecondOfDay(minutes * 60L).toString())
+            val time = LocalTime.ofSecondOfDay(minutes * 60L).toString()
+            Text(if (nextDay) "$time (next day)" else time)
         }
     }
     if (showPicker) {

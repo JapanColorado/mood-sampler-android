@@ -11,6 +11,7 @@ import com.russellwhite.moodsampler.data.settings.SettingsRepository
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -22,6 +23,10 @@ import kotlinx.coroutines.sync.withLock
  * fire, boot, time change, settings change) funnels through the idempotent
  * [ensureScheduled], which keeps the schedule ~2 days deep with no background
  * jobs.
+ *
+ * Days here are *sampling* days, not calendar days: with an AM end time the
+ * span that started yesterday morning is still the current day at 00:30, so
+ * generation keys off [SamplingConfig.samplingDayFor].
  */
 class PromptScheduler(
     private val context: Context,
@@ -39,7 +44,7 @@ class PromptScheduler(
         sweepOverdueLocked()
         val config = settings.current().toSamplingConfig()
         val now = clock.instant()
-        val today = LocalDate.now(clock)
+        val today = currentSamplingDay(config)
         if (!dao.hasDate(today.toString())) generateInto(today, config, onlyAfter = now)
         val tomorrow = today.plusDays(1)
         if (!dao.hasDate(tomorrow.toString())) generateInto(tomorrow, config, onlyAfter = null)
@@ -77,19 +82,21 @@ class PromptScheduler(
         val config = settings.current().toSamplingConfig()
         val now = clock.instant()
         dao.cancelFuturePending(now.toEpochMilli())
-        generateInto(LocalDate.now(clock), config, onlyAfter = now)
-        generateInto(LocalDate.now(clock).plusDays(1), config, onlyAfter = null)
+        val today = currentSamplingDay(config)
+        generateInto(today, config, onlyAfter = now)
+        generateInto(today.plusDays(1), config, onlyAfter = null)
         armNextLocked(now)
     }
 
     /** Debug-only: schedule a real prompt shortly from now to exercise the full pipeline. */
     suspend fun debugFireIn(seconds: Long) {
+        val config = settings.current().toSamplingConfig()
         val now = clock.instant()
         val id = mutex.withLock {
             dao.insert(
                 ScheduledPromptEntity(
                     scheduledAtEpochMs = now.plusSeconds(seconds).toEpochMilli(),
-                    localDate = LocalDate.now(clock).toString(),
+                    localDate = currentSamplingDay(config).toString(),
                     windowIndex = DEBUG_WINDOW_INDEX,
                     status = PromptStatus.PENDING,
                 )
@@ -99,6 +106,10 @@ class PromptScheduler(
         // ensureScheduled arms the earliest pending prompt, which is this one.
         check(id > 0)
     }
+
+    /** The sampling day now falls in — the previous date while inside an AM tail. */
+    private fun currentSamplingDay(config: SamplingConfig): LocalDate =
+        config.samplingDayFor(LocalDateTime.now(clock))
 
     /** Mark overdue rows MISSED so stats stay honest even if alarms never fired. */
     private suspend fun sweepOverdueLocked() {

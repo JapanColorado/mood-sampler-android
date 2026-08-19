@@ -6,10 +6,12 @@ import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.PromptWithSample
+import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import com.russellwhite.moodsampler.ui.graphViewModelFactory
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,10 +73,7 @@ class DashboardViewModel(
         val samples = answered.map { it.prompt to it.sample!! }
 
         val days = samples
-            .groupBy {
-                ZonedDateTime.ofInstant(Instant.ofEpochMilli(it.first.scheduledAtEpochMs), zone)
-                    .toLocalDate()
-            }
+            .groupBy { samplingDate(it.first, zone) }
             .map { (date, rows) ->
                 DayMood(
                     date = date,
@@ -115,6 +114,17 @@ class DashboardViewModel(
             missed = prompts.count { it.prompt.status == PromptStatus.MISSED },
         )
     }
+
+    /**
+     * The sampling day a prompt belongs to. Uses the stored day rather than the
+     * calendar date so that with an AM end time a 00:30 sample charts under the
+     * day it started, not the next one.
+     */
+    private fun samplingDate(prompt: ScheduledPromptEntity, zone: ZoneId): LocalDate =
+        runCatching { LocalDate.parse(prompt.localDate) }.getOrElse {
+            ZonedDateTime.ofInstant(Instant.ofEpochMilli(prompt.scheduledAtEpochMs), zone)
+                .toLocalDate()
+        }
 
     companion object {
         val Factory = graphViewModelFactory { graph -> DashboardViewModel(graph.database) }

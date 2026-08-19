@@ -1,6 +1,7 @@
 package com.russellwhite.moodsampler.scheduling
 
 import com.google.common.truth.Truth.assertThat
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -123,6 +124,119 @@ class ScheduleGeneratorTest {
         )
         val prompts = ScheduleGenerator(Random(1)).generateDay(LocalDate.of(2026, 6, 1), zone, tight)
         assertThat(prompts).hasSize(12)
+    }
+
+    // --- past-midnight (AM end time) spans ---
+
+    private val wrapping = SamplingConfig(
+        dayStart = LocalTime.of(21, 0),
+        dayEnd = LocalTime.of(2, 0),
+        windowsPerDay = 5,
+        minGapMinutes = 15,
+    )
+
+    /** Minutes since the span start, so a wrapped tail keeps counting past 1440. */
+    private fun offsetFromStart(prompt: GeneratedPrompt, config: SamplingConfig): Long {
+        val start = prompt.localDate.atTime(config.dayStart).atZone(zone).toInstant()
+        return Duration.between(start, prompt.fireAt).toMinutes()
+    }
+
+    @Test
+    fun wrappedSpanStaysInsideItsWindows() {
+        val gen = ScheduleGenerator(Random(11))
+        val windowLen = 5 * 60 / 5.0  // 5-hour span over 5 windows
+        repeat(500) { day ->
+            val date = LocalDate.of(2026, 1, 1).plusDays(day.toLong())
+            val prompts = gen.generateDay(date, zone, wrapping)
+            assertThat(prompts).hasSize(5)
+            prompts.forEach { p ->
+                val offset = offsetFromStart(p, wrapping)
+                assertThat(offset).isAtLeast((windowLen * p.windowIndex).toLong())
+                assertThat(offset).isLessThan((windowLen * (p.windowIndex + 1)).toLong())
+            }
+        }
+    }
+
+    @Test
+    fun wrappedTailFiresOnTheNextCalendarDateButKeepsItsSamplingDay() {
+        val gen = ScheduleGenerator(Random(3))
+        val date = LocalDate.of(2026, 6, 10)
+        var sawTail = false
+        repeat(200) {
+            gen.generateDay(date, zone, wrapping).forEach { p ->
+                assertThat(p.localDate).isEqualTo(date)
+                val local = ZonedDateTime.ofInstant(p.fireAt, zone)
+                if (local.toLocalTime() < LocalTime.of(12, 0)) {
+                    sawTail = true
+                    assertThat(local.toLocalDate()).isEqualTo(date.plusDays(1))
+                    assertThat(local.toLocalTime()).isLessThan(LocalTime.of(2, 0))
+                } else {
+                    assertThat(local.toLocalDate()).isEqualTo(date)
+                    assertThat(local.toLocalTime()).isAtLeast(LocalTime.of(21, 0))
+                }
+            }
+        }
+        assertThat(sawTail).isTrue()
+    }
+
+    @Test
+    fun wrappedSpanInstantsStayMonotonicAcrossMidnightAndDst() {
+        val gen = ScheduleGenerator(Random(17))
+        val dates = listOf(
+            LocalDate.of(2026, 6, 10),
+            LocalDate.of(2026, 3, 7),   // tail crosses spring forward
+            LocalDate.of(2026, 10, 31), // tail crosses fall back
+        )
+        dates.forEach { date ->
+            repeat(200) {
+                val instants = gen.generateDay(date, zone, wrapping).map { it.fireAt }
+                assertThat(instants).hasSize(5)
+                instants.zipWithNext().forEach { (a, b) -> assertThat(b).isGreaterThan(a) }
+            }
+        }
+    }
+
+    @Test
+    fun consecutiveWrappedDaysDoNotOverlap() {
+        val gen = ScheduleGenerator(Random(23))
+        repeat(300) { day ->
+            val date = LocalDate.of(2026, 1, 1).plusDays(day.toLong())
+            val today = gen.generateDay(date, zone, wrapping)
+            val tomorrow = gen.generateDay(date.plusDays(1), zone, wrapping)
+            assertThat(tomorrow.first().fireAt).isGreaterThan(today.last().fireAt)
+        }
+    }
+
+    @Test
+    fun identicalStartAndEndSamplesTheWholeDay() {
+        val roundClock = SamplingConfig(
+            dayStart = LocalTime.of(9, 0),
+            dayEnd = LocalTime.of(9, 0),
+            windowsPerDay = 6,
+            minGapMinutes = 15,
+        )
+        val gen = ScheduleGenerator(Random(31))
+        val date = LocalDate.of(2026, 6, 10)
+        val prompts = gen.generateDay(date, zone, roundClock)
+        assertThat(prompts).hasSize(6)
+        prompts.forEach { p ->
+            val offset = offsetFromStart(p, roundClock)
+            assertThat(offset).isAtLeast(0L)
+            assertThat(offset).isLessThan(24 * 60L)
+        }
+    }
+
+    @Test
+    fun spanShorterThanWindowCountStillTerminates() {
+        // 09:00-09:03 with 6 windows: fewer minutes than windows must not divide by zero.
+        val sliver = SamplingConfig(
+            dayStart = LocalTime.of(9, 0),
+            dayEnd = LocalTime.of(9, 3),
+            windowsPerDay = 6,
+            minGapMinutes = 15,
+        )
+        val prompts = ScheduleGenerator(Random(4)).generateDay(LocalDate.of(2026, 6, 1), zone, sliver)
+        assertThat(prompts).hasSize(3)
     }
 
     @Test

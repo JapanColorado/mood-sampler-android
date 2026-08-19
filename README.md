@@ -11,6 +11,9 @@ oversample memorable moments.
 - minSdk 31 (Android 12+), target/compile SDK 35
 - Stratified random schedule: waking hours split into N equal windows, one
   uniform-random prompt per window (N and hours configurable)
+- Night-owl friendly: an end time earlier than the start time runs past midnight
+  (09:00–01:00 is a 16-hour day), and those small-hours prompts stay grouped with
+  the day that started them everywhere — stats, charts, and export
 - Prompts expire (default 20 min) and are recorded as **missed** so response
   rates stay honest; expired prompts can't be answered late
 - The UI never reveals upcoming prompt times — anticipation biases sampling
