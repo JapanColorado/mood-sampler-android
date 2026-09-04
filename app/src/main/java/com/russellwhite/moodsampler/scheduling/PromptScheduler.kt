@@ -7,6 +7,7 @@ import android.content.Intent
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
+import com.russellwhite.moodsampler.data.settings.OnboardingGate
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
 import java.time.Clock
 import java.time.Instant
@@ -41,12 +42,17 @@ class PromptScheduler(
     private val generator: ScheduleGenerator,
     private val notifier: PromptNotifier,
     private val clock: Clock,
+    /** Null (tests) means "always ready". */
+    private val onboardingGate: OnboardingGate? = null,
 ) {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
     private val dao get() = db.scheduledPromptDao()
     private val mutex = Mutex()
 
     suspend fun ensureScheduled(): Unit = mutex.withLock {
+        // A fresh install draws no prompts until onboarding has asked for
+        // permissions — otherwise it would rack up MISSED rows nobody could answer.
+        if (onboardingGate?.isDone() == false) return@withLock
         sweepOverdueLocked()
         val config = settings.current().toSamplingConfig()
         val now = clock.instant()

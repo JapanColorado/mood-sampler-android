@@ -5,6 +5,7 @@ import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.CsvExporter
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
+import com.russellwhite.moodsampler.data.settings.OnboardingGate
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
 import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.scheduling.PromptNotifier
@@ -19,6 +20,7 @@ class AppGraph(context: Context) {
     val categoryRepository = CategoryRepository(database)
     val csvExporter = CsvExporter(context, database)
     val promptNotifier = PromptNotifier(context)
+    val onboardingGate = OnboardingGate(database, settingsRepository)
     val promptScheduler = PromptScheduler(
         context = context,
         db = database,
@@ -26,6 +28,7 @@ class AppGraph(context: Context) {
         generator = ScheduleGenerator(),
         notifier = promptNotifier,
         clock = DeviceClock,
+        onboardingGate = onboardingGate,
     )
 }
 

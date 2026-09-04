@@ -26,9 +26,11 @@ import com.russellwhite.moodsampler.ui.dashboard.DashboardScreen
 import com.russellwhite.moodsampler.ui.history.EditSampleScreen
 import com.russellwhite.moodsampler.ui.history.HistoryScreen
 import com.russellwhite.moodsampler.ui.home.HomeScreen
+import com.russellwhite.moodsampler.ui.onboarding.OnboardingScreen
 import com.russellwhite.moodsampler.ui.settings.SettingsScreen
 
 object Routes {
+    const val ONBOARDING = "onboarding"
     const val HOME = "home"
     const val DASHBOARD = "dashboard"
     const val HISTORY = "history"
@@ -49,10 +51,11 @@ private val bottomTabs = listOf(
 )
 
 /** Focused, single-purpose flows that hide the tab bar. */
-private val fullScreenRoutes = setOf(Routes.CAPTURE, Routes.EDIT)
+private val fullScreenRoutes = setOf(Routes.ONBOARDING, Routes.CAPTURE, Routes.EDIT)
 
+/** @param startDestination [Routes.HOME], or [Routes.ONBOARDING] on a fresh install. */
 @Composable
-fun AppNav(navController: NavHostController) {
+fun AppNav(navController: NavHostController, startDestination: String = Routes.HOME) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
@@ -80,9 +83,16 @@ fun AppNav(navController: NavHostController) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.HOME,
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding),
         ) {
+            composable(Routes.ONBOARDING) {
+                OnboardingScreen(onFinished = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.ONBOARDING) { inclusive = true }
+                    }
+                })
+            }
             composable(Routes.HOME) { HomeScreen() }
             composable(Routes.DASHBOARD) { DashboardScreen() }
             composable(Routes.HISTORY) {
