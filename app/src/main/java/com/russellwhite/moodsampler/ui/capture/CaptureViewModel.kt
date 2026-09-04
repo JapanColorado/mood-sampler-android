@@ -10,6 +10,7 @@ import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
+import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.scheduling.PromptScheduler
 import com.russellwhite.moodsampler.ui.graphViewModelFactory
 import java.time.Clock
@@ -39,7 +40,7 @@ class CaptureViewModel(
     private val sampleRepository: SampleRepository,
     private val scheduler: PromptScheduler,
     settings: SettingsRepository,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<CaptureUiState>(CaptureUiState.Loading)

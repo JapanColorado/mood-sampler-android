@@ -16,6 +16,8 @@ oversample memorable moments.
   the day that started them everywhere — stats, charts, and export
 - Prompts expire (default 20 min) and are recorded as **missed** so response
   rates stay honest; expired prompts can't be answered late
+- Follows the phone's time zone: day start/end are local times, and the
+  upcoming schedule is redrawn automatically when the zone changes (travel)
 - The UI never reveals upcoming prompt times — anticipation biases sampling
 - Insights dashboard (mood over time, by time-of-day, by activity/place/company),
   CSV export via the share sheet

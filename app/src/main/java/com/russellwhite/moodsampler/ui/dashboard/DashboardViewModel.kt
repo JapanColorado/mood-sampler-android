@@ -7,6 +7,7 @@ import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.PromptWithSample
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
+import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.ui.graphViewModelFactory
 import java.time.Clock
 import java.time.Instant
@@ -47,7 +48,7 @@ data class DashboardData(
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModel(
     db: AppDatabase,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
     val range = MutableStateFlow(DashboardRange.TWO_WEEKS)

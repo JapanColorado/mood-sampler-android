@@ -6,6 +6,7 @@ import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.settings.AppSettings
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
+import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.ui.graphViewModelFactory
 import java.time.Clock
 import java.time.LocalDateTime
@@ -63,7 +64,7 @@ data class HomeUiState(
 class HomeViewModel(
     db: AppDatabase,
     settingsRepository: SettingsRepository,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
     private val dao = db.scheduledPromptDao()

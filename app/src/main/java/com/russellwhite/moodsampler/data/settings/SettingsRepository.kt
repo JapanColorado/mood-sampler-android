@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.russellwhite.moodsampler.scheduling.SamplingConfig
 import java.time.LocalTime
@@ -38,6 +39,7 @@ class SettingsRepository(private val context: Context) {
         val DAY_END_MINUTES = intPreferencesKey("day_end_minutes")
         val EXPIRY_MINUTES = intPreferencesKey("expiry_minutes")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+        val SCHEDULE_ZONE_ID = stringPreferencesKey("schedule_zone_id")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -67,4 +69,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingDone() =
         context.dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
+
+    /**
+     * Zone ID the upcoming schedule was generated in, or null before the first
+     * generation. Internal bookkeeping for [com.russellwhite.moodsampler.scheduling.PromptScheduler],
+     * which regenerates when the phone's zone no longer matches.
+     */
+    suspend fun scheduleZoneId(): String? = context.dataStore.data.first()[Keys.SCHEDULE_ZONE_ID]
+
+    suspend fun setScheduleZoneId(zoneId: String) =
+        context.dataStore.edit { it[Keys.SCHEDULE_ZONE_ID] = zoneId }
 }

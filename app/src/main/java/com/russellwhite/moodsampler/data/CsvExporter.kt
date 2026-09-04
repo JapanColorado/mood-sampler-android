@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.PromptWithSample
+import com.russellwhite.moodsampler.scheduling.DeviceClock
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -17,7 +18,7 @@ import kotlinx.coroutines.withContext
 class CsvExporter(
     private val context: Context,
     private val db: AppDatabase,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock = DeviceClock,
 ) {
     /** Write all concluded prompts to a CSV in cacheDir and return a shareable content Uri. */
     suspend fun export(): Uri = withContext(Dispatchers.IO) {

@@ -45,6 +45,9 @@ import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.settings.AppSettings
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)) {
@@ -101,6 +104,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
             }
         }
 
+        TimeZoneCard()
+
         CategoryEditorCard("Activities", CategoryType.ACTIVITY, categories, viewModel)
         CategoryEditorCard("Places", CategoryType.LOCATION, categories, viewModel)
         CategoryEditorCard("Company", CategoryType.SOCIAL, categories, viewModel)
@@ -129,6 +134,35 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
         }
 
         ExactAlarmCard()
+    }
+}
+
+/**
+ * Read-only: the schedule always follows the phone's zone (see
+ * [com.russellwhite.moodsampler.scheduling.DeviceClock]). Re-read on resume
+ * so a zone change made in system settings shows up without restarting.
+ */
+@Composable
+private fun TimeZoneCard() {
+    var zone by remember { mutableStateOf(ZoneId.systemDefault()) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        zone = ZoneId.systemDefault()
+        onPauseOrDispose { }
+    }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Time zone", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${zone.getDisplayName(TextStyle.FULL, Locale.getDefault())} (${zone.id})",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "Follows the phone's time zone. Day start and end are local times, " +
+                    "and the upcoming schedule is redrawn automatically if the zone changes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -27,6 +27,12 @@ import kotlinx.coroutines.sync.withLock
  * Days here are *sampling* days, not calendar days: with an AM end time the
  * span that started yesterday morning is still the current day at 00:30, so
  * generation keys off [SamplingConfig.samplingDayFor].
+ *
+ * Wall-clock times are always resolved in the phone's current time zone
+ * ([clock] should be [DeviceClock]). Prompts are stored as instants, so when
+ * the phone changes zone the already-drawn ones would land at the wrong local
+ * hours; [ensureScheduled] notices the zone no longer matches the one the
+ * schedule was generated in and redraws the future in the new zone.
  */
 class PromptScheduler(
     private val context: Context,
@@ -44,6 +50,10 @@ class PromptScheduler(
         sweepOverdueLocked()
         val config = settings.current().toSamplingConfig()
         val now = clock.instant()
+        if (zoneChanged()) {
+            regenerateFutureLocked(config, now)
+            return@withLock
+        }
         val today = currentSamplingDay(config)
         if (!dao.hasDate(today.toString())) generateInto(today, config, onlyAfter = now)
         val tomorrow = today.plusDays(1)
@@ -79,13 +89,35 @@ class PromptScheduler(
     /** Sampling settings changed: drop the stale future schedule and regenerate. */
     suspend fun onConfigChanged(): Unit = mutex.withLock {
         sweepOverdueLocked()
-        val config = settings.current().toSamplingConfig()
-        val now = clock.instant()
+        regenerateFutureLocked(settings.current().toSamplingConfig(), clock.instant())
+    }
+
+    /**
+     * Drop every not-yet-fired prompt and redraw today's remainder plus
+     * tomorrow in the phone's current zone. Live (NOTIFIED) prompts keep
+     * running out their expiry untouched.
+     */
+    private suspend fun regenerateFutureLocked(config: SamplingConfig, now: Instant) {
         dao.cancelFuturePending(now.toEpochMilli())
         val today = currentSamplingDay(config)
         generateInto(today, config, onlyAfter = now)
         generateInto(today.plusDays(1), config, onlyAfter = null)
+        settings.setScheduleZoneId(clock.zone.id)
         armNextLocked(now)
+    }
+
+    /**
+     * True when the phone's zone differs from the one the schedule was last
+     * generated in. A first run (nothing recorded yet) just adopts the phone's
+     * zone without redrawing.
+     */
+    private suspend fun zoneChanged(): Boolean {
+        val current = clock.zone.id
+        val previous = settings.scheduleZoneId() ?: run {
+            settings.setScheduleZoneId(current)
+            return false
+        }
+        return previous != current
     }
 
     /** Debug-only: schedule a real prompt shortly from now to exercise the full pipeline. */

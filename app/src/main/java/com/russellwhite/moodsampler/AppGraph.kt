@@ -5,10 +5,10 @@ import com.russellwhite.moodsampler.data.CsvExporter
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
+import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.scheduling.PromptNotifier
 import com.russellwhite.moodsampler.scheduling.PromptScheduler
 import com.russellwhite.moodsampler.scheduling.ScheduleGenerator
-import java.time.Clock
 
 /** Manual DI container; created once in [MoodSamplerApp]. */
 class AppGraph(context: Context) {
@@ -23,7 +23,7 @@ class AppGraph(context: Context) {
         settings = settingsRepository,
         generator = ScheduleGenerator(),
         notifier = promptNotifier,
-        clock = Clock.systemDefaultZone(),
+        clock = DeviceClock,
     )
 }
 
