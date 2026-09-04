@@ -48,11 +48,31 @@ interface ScheduledPromptDao {
     @Query("UPDATE scheduled_prompt SET status = 'MISSED' WHERE id IN (:ids)")
     suspend fun markMissed(ids: List<Long>)
 
+    /** User declined the prompt on purpose: still MISSED for honest response rates, but with a reason. */
+    @Query(
+        """UPDATE scheduled_prompt SET status = 'MISSED', skipReason = :reason
+           WHERE id = :id AND status IN ('PENDING', 'NOTIFIED')"""
+    )
+    suspend fun markSkipped(id: Long, reason: String): Int
+
+    /** The user deleted this prompt's answer: drop it from stats rather than count it as missed. */
+    @Query(
+        """UPDATE scheduled_prompt SET status = 'CANCELLED', answeredAtEpochMs = NULL
+           WHERE id = :id AND status = 'ANSWERED'"""
+    )
+    suspend fun cancelAnswered(id: Long): Int
+
     @Query("UPDATE scheduled_prompt SET status = 'CANCELLED' WHERE status = 'PENDING' AND scheduledAtEpochMs > :nowMs")
     suspend fun cancelFuturePending(nowMs: Long): Int
 
     @Query("SELECT COUNT(*) FROM scheduled_prompt WHERE status = :status AND scheduledAtEpochMs >= :sinceMs")
     suspend fun countByStatusSince(status: PromptStatus, sinceMs: Long): Int
+
+    @Query("SELECT COUNT(*) FROM scheduled_prompt")
+    suspend fun count(): Int
+
+    @Query("SELECT * FROM scheduled_prompt WHERE status = 'NOTIFIED'")
+    suspend fun allNotified(): List<ScheduledPromptEntity>
 
     @Query("SELECT * FROM scheduled_prompt WHERE localDate = :localDate ORDER BY scheduledAtEpochMs")
     fun promptsForDateFlow(localDate: String): Flow<List<ScheduledPromptEntity>>
@@ -75,4 +95,19 @@ interface ScheduledPromptDao {
            ORDER BY scheduledAtEpochMs"""
     )
     suspend fun allConcludedPrompts(): List<PromptWithSample>
+
+    /** Newest first, for the History screen. */
+    @Transaction
+    @Query(
+        """SELECT * FROM scheduled_prompt
+           WHERE status IN ('ANSWERED', 'MISSED')
+           ORDER BY scheduledAtEpochMs DESC"""
+    )
+    fun historyFlow(): Flow<List<PromptWithSample>>
+
+    @Query("SELECT * FROM scheduled_prompt ORDER BY scheduledAtEpochMs")
+    suspend fun getAll(): List<ScheduledPromptEntity>
+
+    @Query("DELETE FROM scheduled_prompt")
+    suspend fun deleteAll()
 }

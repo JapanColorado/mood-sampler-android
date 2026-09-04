@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.PromptWithSample
 import com.russellwhite.moodsampler.data.db.SampleEntity
+import com.russellwhite.moodsampler.data.db.SampleWithActivities
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import java.time.ZoneId
 import org.junit.Test
@@ -22,10 +23,13 @@ class CsvFormatTest {
             windowIndex = 0, status = status,
             answeredAtEpochMs = if (withSample) 1_700_000_120_000 else null,
         ),
-        sample = if (withSample) SampleEntity(
-            id = 1, promptId = 1, valence = 0.5f, arousal = -0.25f,
-            activityId = 10, locationId = null, socialId = null,
-            note = note, createdAtEpochMs = 1_700_000_120_000,
+        sample = if (withSample) SampleWithActivities(
+            sample = SampleEntity(
+                id = 1, promptId = 1, valence = 0.5f, arousal = -0.25f,
+                locationId = null, socialId = null,
+                note = note, createdAtEpochMs = 1_700_000_120_000,
+            ),
+            activityIds = listOf(10L),
         ) else null,
     )
 

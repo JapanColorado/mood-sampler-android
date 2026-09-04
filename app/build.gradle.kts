@@ -13,8 +13,8 @@ android {
         applicationId = "com.russellwhite.moodsampler"
         minSdk = 31
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +38,14 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets {
+        // Exported Room schemas double as fixtures for MigrationTest.
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

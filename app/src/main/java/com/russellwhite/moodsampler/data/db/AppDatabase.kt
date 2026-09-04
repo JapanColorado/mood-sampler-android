@@ -7,9 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ScheduledPromptEntity::class, SampleEntity::class, CategoryEntity::class],
-    version = 1,
-    exportSchema = false,
+    entities = [
+        ScheduledPromptEntity::class,
+        SampleEntity::class,
+        SampleActivityCrossRef::class,
+        CategoryEntity::class,
+    ],
+    version = AppDatabase.VERSION,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun scheduledPromptDao(): ScheduledPromptDao
@@ -17,24 +22,17 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
 
     companion object {
+        const val VERSION = 2
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "moodsampler.db")
+                .addMigrations(MIGRATION_1_2)
                 .addCallback(SeedCallback)
                 .build()
 
         /** Default category lists inserted on first run; user can edit/archive them later. */
-        val DEFAULT_CATEGORIES: Map<CategoryType, List<String>> = mapOf(
-            CategoryType.ACTIVITY to listOf(
-                "Work", "Chores", "Meals", "Exercise", "Socializing",
-                "Screen / leisure", "Reading", "Commuting", "Resting", "Other",
-            ),
-            CategoryType.LOCATION to listOf(
-                "Home", "Work", "Outside", "Transit", "Someone's home", "Public place",
-            ),
-            CategoryType.SOCIAL to listOf(
-                "Alone", "Partner", "Family", "Friends", "Coworkers", "Strangers",
-            ),
-        )
+        val DEFAULT_CATEGORIES: Map<CategoryType, List<String>>
+            get() = DefaultCategories.DEFAULT_CATEGORIES
 
         private object SeedCallback : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

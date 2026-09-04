@@ -44,7 +44,8 @@ class CsvExporter(
             sb.append("scheduled_at_iso,answered_at_iso,status,latency_s,valence,arousal,activity,location,social,note\r\n")
             rows.forEach { row ->
                 val p = row.prompt
-                val s = row.sample
+                val s = row.sample?.sample
+                val activityIds = row.sample?.activityIds.orEmpty()
                 val latency = p.answeredAtEpochMs?.let { (it - p.scheduledAtEpochMs) / 1000 }
                 sb.append(
                     listOf(
@@ -54,7 +55,7 @@ class CsvExporter(
                         latency?.toString() ?: "",
                         s?.valence?.toString() ?: "",
                         s?.arousal?.toString() ?: "",
-                        s?.activityId?.let { labels[it] } ?: "",
+                        activityIds.firstOrNull()?.let { labels[it] } ?: "",
                         s?.locationId?.let { labels[it] } ?: "",
                         s?.socialId?.let { labels[it] } ?: "",
                         s?.note ?: "",

@@ -5,9 +5,12 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.russellwhite.moodsampler.data.db.AppDatabase
+import com.russellwhite.moodsampler.data.db.CategoryEntity
+import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -65,15 +68,68 @@ class DaoTest {
         val missedId = dao.insert(prompt(2_000, PromptStatus.MISSED))
 
         fun sample(promptId: Long) = SampleEntity(
-            promptId = promptId, valence = 0.5f, arousal = -0.2f,
-            activityId = null, locationId = null, socialId = null,
+            promptId = promptId, valence = 0.5f, arousal = -0.2f, pain = 3,
+            locationId = null, socialId = null,
             note = null, createdAtEpochMs = 0,
         )
+        val work = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "Work", sortOrder = 1))
+        val music = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "Music", sortOrder = 2))
 
-        assertThat(repo.saveAnswer(sample(okId), answeredAtMs = 1_100)).isTrue()
-        assertThat(repo.saveAnswer(sample(missedId), answeredAtMs = 2_100)).isFalse()
+        assertThat(repo.saveAnswer(sample(okId), listOf(work, music), answeredAtMs = 1_100)).isTrue()
+        assertThat(repo.saveAnswer(sample(missedId), listOf(work), answeredAtMs = 2_100)).isFalse()
         assertThat(db.sampleDao().count()).isEqualTo(1)
         assertThat(dao.getById(okId)?.answeredAtEpochMs).isEqualTo(1_100)
+        val saved = db.sampleDao().byPromptId(okId)
+        assertThat(saved?.sample?.pain).isEqualTo(3)
+        assertThat(saved?.activityIds).containsExactly(work, music)
+    }
+
+    @Test
+    fun updateAnswer_replacesActivityTags() = runTest {
+        val dao = db.scheduledPromptDao()
+        val repo = SampleRepository(db)
+        val id = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
+        val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
+        val b = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "B", sortOrder = 2))
+        repo.saveAnswer(
+            SampleEntity(promptId = id, valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
+            listOf(a), answeredAtMs = 1_100,
+        )
+        val saved = db.sampleDao().byPromptId(id)!!
+        repo.updateAnswer(saved.sample.copy(pain = 7, note = "edited"), listOf(b))
+        val updated = db.sampleDao().byPromptId(id)!!
+        assertThat(updated.sample.pain).isEqualTo(7)
+        assertThat(updated.sample.note).isEqualTo("edited")
+        assertThat(updated.activityIds).containsExactly(b)
+    }
+
+    @Test
+    fun deleteAnswer_cancelsPromptAndClearsTags() = runTest {
+        val dao = db.scheduledPromptDao()
+        val repo = SampleRepository(db)
+        val id = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
+        val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
+        repo.saveAnswer(
+            SampleEntity(promptId = id, valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
+            listOf(a), answeredAtMs = 1_100,
+        )
+        assertThat(repo.deleteAnswer(id)).isTrue()
+        assertThat(db.sampleDao().count()).isEqualTo(0)
+        assertThat(dao.getById(id)?.status).isEqualTo(PromptStatus.CANCELLED)
+        assertThat(dao.getById(id)?.answeredAtEpochMs).isNull()
+        assertThat(db.sampleDao().categoryUsageFlow().first()).isEmpty()
+    }
+
+    @Test
+    fun markSkipped_onlyFromLivePrompts() = runTest {
+        val dao = db.scheduledPromptDao()
+        val live = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
+        val done = dao.insert(prompt(2_000, PromptStatus.ANSWERED))
+        assertThat(dao.markSkipped(live, "busy")).isEqualTo(1)
+        assertThat(dao.markSkipped(done, "busy")).isEqualTo(0)
+        assertThat(dao.getById(live)?.status).isEqualTo(PromptStatus.MISSED)
+        assertThat(dao.getById(live)?.skipReason).isEqualTo("busy")
+        assertThat(dao.getById(done)?.skipReason).isNull()
     }
 
     @Test
@@ -97,7 +153,9 @@ class DaoTest {
         val seeded = AppDatabase.build(ApplicationProvider.getApplicationContext())
         try {
             val all = seeded.categoryDao().getAll()
-            assertThat(all.map { it.label }).containsAtLeast("Work", "Home", "Alone")
+            assertThat(all.map { it.label }).containsAtLeast("Work", "Home", "Alone", "Gaming", "Gym")
+            val activities = all.filter { it.type == CategoryType.ACTIVITY }.sortedBy { it.sortOrder }
+            assertThat(activities.last().label).isEqualTo("Other")
         } finally {
             seeded.close()
             ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -114,13 +172,14 @@ class DaoTest {
         db.sampleDao().insert(
             SampleEntity(
                 promptId = answeredId, valence = 1f, arousal = 0f,
-                activityId = null, locationId = null, socialId = null,
+                locationId = null, socialId = null,
                 note = null, createdAtEpochMs = 1_050,
             )
         )
         val rows = dao.allConcludedPrompts()
         assertThat(rows).hasSize(2)
-        assertThat(rows[0].sample?.valence).isEqualTo(1f)
+        assertThat(rows[0].sample?.sample?.valence).isEqualTo(1f)
+        assertThat(rows[0].sample?.activityIds).isEmpty()
         assertThat(rows[1].sample).isNull()
     }
 }

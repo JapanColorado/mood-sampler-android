@@ -89,12 +89,12 @@ class CaptureViewModel(
                     promptId = promptId,
                     valence = valence.coerceIn(-1f, 1f),
                     arousal = arousal.coerceIn(-1f, 1f),
-                    activityId = activityId,
                     locationId = locationId,
                     socialId = socialId,
                     note = note.trim().ifEmpty { null },
                     createdAtEpochMs = 0,  // stamped by the repository
                 ),
+                activityIds = listOfNotNull(activityId),
                 answeredAtMs = clock.millis(),
             )
             if (ok) {

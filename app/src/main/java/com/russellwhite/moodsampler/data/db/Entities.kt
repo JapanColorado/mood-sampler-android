@@ -18,10 +18,10 @@ enum class PromptStatus {
     /** User completed the capture. */
     ANSWERED,
 
-    /** Expired unanswered. Counts against response rate — kept for honest stats. */
+    /** Expired unanswered (or skipped on purpose). Counts against response rate — kept for honest stats. */
     MISSED,
 
-    /** Invalidated by a settings change. Excluded from response-rate stats. */
+    /** Invalidated by a settings change, or its answer was deleted by the user. Excluded from response-rate stats. */
     CANCELLED,
 }
 
@@ -39,6 +39,11 @@ data class ScheduledPromptEntity(
     val status: PromptStatus,
     val notifiedAtEpochMs: Long? = null,
     val answeredAtEpochMs: Long? = null,
+    /**
+     * Why the user declined a MISSED prompt (see [com.russellwhite.moodsampler.data.SkipReason]);
+     * null for prompts that simply expired.
+     */
+    val skipReason: String? = null,
 )
 
 @Entity(
@@ -59,11 +64,37 @@ data class SampleEntity(
     val valence: Float,
     /** Arousal/energy, -1.0 (low) .. +1.0 (high). */
     val arousal: Float,
-    val activityId: Long?,
+    /** Physical pain, 0 (none) .. 10 (worst imaginable). Null only for samples recorded before the slider existed. */
+    val pain: Int? = null,
     val locationId: Long?,
     val socialId: Long?,
     val note: String?,
     val createdAtEpochMs: Long,
+)
+
+/** Many-to-many: a sample can tag several activities. */
+@Entity(
+    tableName = "sample_activity",
+    primaryKeys = ["sampleId", "categoryId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SampleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sampleId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = CategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["categoryId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("categoryId")],
+)
+data class SampleActivityCrossRef(
+    val sampleId: Long,
+    val categoryId: Long,
 )
 
 @Entity(tableName = "category", indices = [Index("type")])
@@ -76,9 +107,21 @@ data class CategoryEntity(
     val isArchived: Boolean = false,
 )
 
+/** A sample plus the ids of the activities it tagged. */
+data class SampleWithActivities(
+    @Embedded val sample: SampleEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "sampleId",
+        entity = SampleActivityCrossRef::class,
+        projection = ["categoryId"],
+    )
+    val activityIds: List<Long>,
+)
+
 /** A concluded prompt (ANSWERED or MISSED) with its sample when answered. */
 data class PromptWithSample(
     @Embedded val prompt: ScheduledPromptEntity,
-    @Relation(parentColumn = "id", entityColumn = "promptId")
-    val sample: SampleEntity?,
+    @Relation(parentColumn = "id", entityColumn = "promptId", entity = SampleEntity::class)
+    val sample: SampleWithActivities?,
 )

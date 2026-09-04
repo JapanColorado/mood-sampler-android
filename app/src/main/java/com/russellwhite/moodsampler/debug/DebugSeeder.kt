@@ -3,6 +3,7 @@ package com.russellwhite.moodsampler.debug
 import com.russellwhite.moodsampler.AppGraph
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
+import com.russellwhite.moodsampler.data.db.SampleActivityCrossRef
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import java.time.LocalDate
@@ -49,18 +50,20 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                 val hourPhase = sin((minute / 60.0 - 9) / 13.0 * PI)
                 val valence = (0.15 + 0.35 * hourPhase + random.nextDouble(-0.45, 0.45))
                 val arousal = (0.3 * hourPhase + random.nextDouble(-0.5, 0.5))
-                sampleDao.insert(
+                val sampleId = sampleDao.insert(
                     SampleEntity(
                         promptId = promptId,
                         valence = valence.coerceIn(-1.0, 1.0).toFloat(),
                         arousal = arousal.coerceIn(-1.0, 1.0).toFloat(),
-                        activityId = activities.randomOrNull(random)?.id,
                         locationId = locations.randomOrNull(random)?.id,
                         socialId = socials.randomOrNull(random)?.id,
                         note = null,
                         createdAtEpochMs = fireAt + 120_000,
                     )
                 )
+                activities.randomOrNull(random)?.let {
+                    sampleDao.insertActivities(listOf(SampleActivityCrossRef(sampleId, it.id)))
+                }
             }
         }
     }

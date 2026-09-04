@@ -71,7 +71,8 @@ class DashboardViewModel(
     ): DashboardData {
         val zone = clock.zone
         val answered = prompts.filter { it.prompt.status == PromptStatus.ANSWERED && it.sample != null }
-        val samples = answered.map { it.prompt to it.sample!! }
+        val samples = answered.map { it.prompt to it.sample!!.sample }
+        val activityRefs = answered.flatMap { row -> row.sample!!.activityIds.map { it to row.sample.sample } }
 
         val days = samples
             .groupBy { samplingDate(it.first, zone) }
@@ -94,9 +95,8 @@ class DashboardViewModel(
             }
             .sortedBy { it.hour }
 
-        fun byCategory(idOf: (pair: Pair<*, com.russellwhite.moodsampler.data.db.SampleEntity>) -> Long?) =
-            samples
-                .mapNotNull { pair -> idOf(pair)?.let { id -> id to pair.second } }
+        fun byCategory(pairs: List<Pair<Long, com.russellwhite.moodsampler.data.db.SampleEntity>>) =
+            pairs
                 .groupBy({ it.first }, { it.second })
                 .mapNotNull { (id, rows) ->
                     labels[id]?.let { label ->
@@ -108,9 +108,9 @@ class DashboardViewModel(
         return DashboardData(
             days = days,
             hours = hours,
-            byActivity = byCategory { it.second.activityId },
-            byLocation = byCategory { it.second.locationId },
-            bySocial = byCategory { it.second.socialId },
+            byActivity = byCategory(activityRefs),
+            byLocation = byCategory(samples.mapNotNull { (_, s) -> s.locationId?.let { it to s } }),
+            bySocial = byCategory(samples.mapNotNull { (_, s) -> s.socialId?.let { it to s } }),
             answered = answered.size,
             missed = prompts.count { it.prompt.status == PromptStatus.MISSED },
         )
