@@ -23,7 +23,20 @@ class PromptNotifier(private val context: Context) {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    fun showPrompt(promptId: Long, expiryMinutes: Int) {
+    /**
+     * Post (or re-post after a snooze) the prompt notification.
+     *
+     * @param expiresAtMs when the prompt turns MISSED; drives the "expires in" text and the UI timeout.
+     * @param snoozeIntent action shown only when there is enough time left to snooze (caller decides).
+     * @param skipIntent records the prompt as skipped without opening the app.
+     */
+    fun showPrompt(
+        promptId: Long,
+        nowMs: Long,
+        expiresAtMs: Long,
+        snoozeIntent: PendingIntent?,
+        skipIntent: PendingIntent,
+    ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
 
         val contentIntent = PendingIntent.getActivity(
@@ -35,21 +48,25 @@ class PromptNotifier(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val remaining = SnoozePolicy.remainingMinutes(nowMs, expiresAtMs)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("How are you feeling right now?")
-            .setContentText("Takes ~15 seconds · expires in $expiryMinutes min")
+            .setContentText("Takes ~15 seconds · expires in $remaining min")
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             // UI auto-dismiss only; the expiry ALARM is what records the miss.
-            .setTimeoutAfter(expiryMinutes * 60_000L)
+            .setTimeoutAfter((expiresAtMs - nowMs).coerceAtLeast(1_000L))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .build()
+            .addAction(R.drawable.ic_notification, "Skip", skipIntent)
+        if (snoozeIntent != null) {
+            builder.addAction(R.drawable.ic_notification, "Remind me in 5 min", snoozeIntent)
+        }
 
         try {
-            NotificationManagerCompat.from(context).notify(promptId.toInt(), notification)
+            NotificationManagerCompat.from(context).notify(promptId.toInt(), builder.build())
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS revoked between check and notify; the prompt
             // will simply expire as MISSED.
@@ -58,6 +75,10 @@ class PromptNotifier(private val context: Context) {
 
     fun cancel(promptId: Long) {
         NotificationManagerCompat.from(context).cancel(promptId.toInt())
+    }
+
+    fun cancelAll() {
+        NotificationManagerCompat.from(context).cancelAll()
     }
 
     companion object {

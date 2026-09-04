@@ -68,8 +68,9 @@ class PromptScheduler(
         // Guard against stale alarms for cancelled/answered prompts.
         val updated = mutex.withLock { dao.markNotified(promptId, now.toEpochMilli()) }
         if (updated == 1) {
-            notifier.showPrompt(promptId, config.expiryMinutes)
-            armExpiryAlarm(promptId, now.plusSeconds(config.expiryMinutes * 60L))
+            val expiresAt = now.plusSeconds(config.expiryMinutes * 60L)
+            postNotification(promptId, now, expiresAt)
+            armExpiryAlarm(promptId, expiresAt)
         }
         ensureScheduled()
     }
@@ -77,12 +78,53 @@ class PromptScheduler(
     /** Expiry alarm fired: if still unanswered, record the miss honestly. */
     suspend fun onExpiryAlarmFired(promptId: Long) {
         val missed = mutex.withLock { dao.markMissedIfNotified(promptId) }
-        if (missed == 1) notifier.cancel(promptId)
+        if (missed == 1) clearPrompt(promptId)
     }
 
     /** Capture saved: clear the notification and its expiry alarm. */
     fun onPromptAnswered(promptId: Long) {
         alarmManager.cancel(expiryPendingIntent(promptId))
+        clearPrompt(promptId)
+    }
+
+    /**
+     * "Remind me in 5 min": hide the notification and re-post it later. The
+     * prompt stays NOTIFIED and its expiry alarm is untouched — snoozing never
+     * buys extra time, it only quiets the phone.
+     */
+    fun onSnoozeRequested(promptId: Long) {
+        notifier.cancel(promptId)
+        setExactOrWindow(clock.instant().plusMillis(SnoozePolicy.SNOOZE_MS), reshowPendingIntent(promptId))
+    }
+
+    /** Snooze elapsed: re-post the notification if the prompt is still answerable. */
+    suspend fun onSnoozeElapsed(promptId: Long) {
+        val prompt = dao.getById(promptId) ?: return
+        if (prompt.status != PromptStatus.NOTIFIED) return
+        val notifiedAt = prompt.notifiedAtEpochMs ?: prompt.scheduledAtEpochMs
+        val expiresAt = Instant.ofEpochMilli(notifiedAt).plusSeconds(settings.current().expiryMinutes * 60L)
+        val now = clock.instant()
+        if (now.isBefore(expiresAt)) postNotification(promptId, now, expiresAt)
+    }
+
+    private fun postNotification(promptId: Long, now: Instant, expiresAt: Instant) {
+        val snooze = if (SnoozePolicy.canSnooze(now.toEpochMilli(), expiresAt.toEpochMilli())) {
+            actionPendingIntent(promptId, AlarmReceiver.ACTION_SNOOZE, KIND_ACTION_SNOOZE)
+        } else {
+            null
+        }
+        notifier.showPrompt(
+            promptId = promptId,
+            nowMs = now.toEpochMilli(),
+            expiresAtMs = expiresAt.toEpochMilli(),
+            snoozeIntent = snooze,
+            skipIntent = actionPendingIntent(promptId, AlarmReceiver.ACTION_SKIP, KIND_ACTION_SKIP),
+        )
+    }
+
+    /** Notification gone plus any pending re-show; the expiry alarm is the caller's business. */
+    private fun clearPrompt(promptId: Long) {
+        alarmManager.cancel(reshowPendingIntent(promptId))
         notifier.cancel(promptId)
     }
 
@@ -94,7 +136,7 @@ class PromptScheduler(
         val skipped = mutex.withLock { dao.markSkipped(promptId, reason) }
         if (skipped == 1) {
             alarmManager.cancel(expiryPendingIntent(promptId))
-            notifier.cancel(promptId)
+            clearPrompt(promptId)
         }
     }
 
@@ -193,14 +235,16 @@ class PromptScheduler(
             alarmManager.cancel(promptPendingIntent(0))
             return
         }
-        val pi = promptPendingIntent(next.id)
-        val at = next.scheduledAtEpochMs
+        setExactOrWindow(Instant.ofEpochMilli(next.scheduledAtEpochMs), promptPendingIntent(next.id))
+    }
+
+    private fun setExactOrWindow(at: Instant, pi: PendingIntent) {
         if (alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.toEpochMilli(), pi)
         } else {
             // Exact-alarm access revoked (possible on API 31–32): degrade to a
             // ±10 min window — still random, still valid ESM.
-            alarmManager.setWindow(AlarmManager.RTC_WAKEUP, at, INEXACT_WINDOW_MS, pi)
+            alarmManager.setWindow(AlarmManager.RTC_WAKEUP, at.toEpochMilli(), INEXACT_WINDOW_MS, pi)
         }
     }
 
@@ -231,8 +275,42 @@ class PromptScheduler(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+    /** Snooze re-show alarm; one per prompt, in its own request-code range. */
+    private fun reshowPendingIntent(promptId: Long): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            requestCode(KIND_RESHOW, promptId),
+            Intent(context, AlarmReceiver::class.java)
+                .setAction(AlarmReceiver.ACTION_RESHOW)
+                .putExtra(AlarmReceiver.EXTRA_PROMPT_ID, promptId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** Notification action buttons (snooze / skip) broadcast back into [AlarmReceiver]. */
+    private fun actionPendingIntent(promptId: Long, action: String, kind: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            requestCode(kind, promptId),
+            Intent(context, AlarmReceiver::class.java)
+                .setAction(action)
+                .putExtra(AlarmReceiver.EXTRA_PROMPT_ID, promptId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /**
+     * Request codes: the prompt alarm uses [RC_PROMPT] and expiry alarms use the
+     * bare prompt id (both predate v2 and must stay cancellable on upgraded
+     * phones); everything newer lives in disjoint ranges so `dumpsys alarm`
+     * stays readable and nothing can ever collide.
+     */
+    private fun requestCode(kind: Int, promptId: Long): Int = kind * KIND_STRIDE + (promptId % KIND_STRIDE).toInt()
+
     companion object {
         private const val RC_PROMPT = 1
+        private const val KIND_STRIDE = 10_000_000
+        private const val KIND_RESHOW = 1
+        private const val KIND_ACTION_SNOOZE = 2
+        private const val KIND_ACTION_SKIP = 3
         private const val FIRE_GRACE_MS = 90_000L
         private const val INEXACT_WINDOW_MS = 10 * 60_000L
         const val DEBUG_WINDOW_INDEX = 99
