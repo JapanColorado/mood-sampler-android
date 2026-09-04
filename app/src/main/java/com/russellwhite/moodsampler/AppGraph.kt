@@ -1,6 +1,7 @@
 package com.russellwhite.moodsampler
 
 import android.content.Context
+import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.CsvExporter
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
@@ -15,6 +16,7 @@ class AppGraph(context: Context) {
     val database: AppDatabase = AppDatabase.build(context)
     val settingsRepository = SettingsRepository(context)
     val sampleRepository = SampleRepository(database)
+    val categoryRepository = CategoryRepository(database)
     val csvExporter = CsvExporter(context, database)
     val promptNotifier = PromptNotifier(context)
     val promptScheduler = PromptScheduler(

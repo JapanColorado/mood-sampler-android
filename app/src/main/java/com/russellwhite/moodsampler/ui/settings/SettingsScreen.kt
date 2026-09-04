@@ -15,8 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,12 +38,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.russellwhite.moodsampler.data.CategoryGroup
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.settings.AppSettings
@@ -52,7 +57,8 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)) {
     val settings by viewModel.settings.collectAsState()
-    val categories by viewModel.categories.collectAsState()
+    val categoryGroups by viewModel.categoryGroups.collectAsState()
+    val usage by viewModel.usage.collectAsState()
     val context = LocalContext.current
 
     Column(
@@ -106,9 +112,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
 
         TimeZoneCard()
 
-        CategoryEditorCard("Activities", CategoryType.ACTIVITY, categories, viewModel)
-        CategoryEditorCard("Places", CategoryType.LOCATION, categories, viewModel)
-        CategoryEditorCard("Company", CategoryType.SOCIAL, categories, viewModel)
+        CategoryEditorCard("Activities", CategoryType.ACTIVITY, categoryGroups, usage, viewModel)
+        CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
+        CategoryEditorCard("Company", CategoryType.SOCIAL, categoryGroups, usage, viewModel)
 
         Card {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -283,11 +289,14 @@ private fun TimeSettingRow(
 private fun CategoryEditorCard(
     title: String,
     type: CategoryType,
-    categories: Map<CategoryType, List<CategoryEntity>>,
+    groups: Map<CategoryType, CategoryGroup>,
+    usage: Map<Long, Int>,
     viewModel: SettingsViewModel,
 ) {
-    var editing by remember { mutableStateOf<CategoryEntity?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    val group = groups[type] ?: CategoryGroup()
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
 
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -298,15 +307,33 @@ private fun CategoryEditorCard(
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories[type].orEmpty().forEach { category ->
-                    AssistChip(onClick = { editing = category }, label = { Text(category.label) })
+                group.active.forEach { category ->
+                    AssistChip(onClick = { editingId = category.id }, label = { Text(category.label) })
                 }
             }
             Text(
-                "Tap a chip to rename or archive it. Archived items keep their history.",
+                "Tap a chip to rename, reorder or archive it. Archived items keep their history.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (group.archived.isNotEmpty()) {
+                TextButton(onClick = { showArchived = !showArchived }) {
+                    Text(if (showArchived) "Hide archived (${group.archived.size})" else "Archived (${group.archived.size})")
+                }
+                if (showArchived) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        group.archived.forEach { category ->
+                            AssistChip(
+                                onClick = { editingId = category.id },
+                                label = { Text(category.label) },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -320,19 +347,88 @@ private fun CategoryEditorCard(
         )
     }
 
+    // Resolve from the live list so the dialog reflects moves/renames as they land.
+    val editing = editingId?.let { id -> (group.active + group.archived).firstOrNull { it.id == id } }
+    if (editingId != null && editing == null) editingId = null
     editing?.let { category ->
-        TextFieldDialog(
-            title = "Edit \"${category.label}\"",
-            initial = category.label,
-            confirmLabel = "Rename",
-            onConfirm = { viewModel.renameCategory(category, it); editing = null },
-            onDismiss = { editing = null },
-            extraAction = "Archive" to {
-                viewModel.archiveCategory(category)
-                editing = null
-            },
+        val index = group.active.indexOfFirst { it.id == category.id }
+        CategoryEditDialog(
+            category = category,
+            usageCount = usage[category.id] ?: 0,
+            canMoveUp = index > 0,
+            canMoveDown = index >= 0 && index < group.active.lastIndex,
+            onRename = { viewModel.renameCategory(category, it); editingId = null },
+            onMove = { viewModel.moveCategory(category, it) },
+            onArchive = { viewModel.archiveCategory(category); editingId = null },
+            onRestore = { viewModel.restoreCategory(category); editingId = null },
+            onDismiss = { editingId = null },
         )
     }
+}
+
+@Composable
+private fun CategoryEditDialog(
+    category: CategoryEntity,
+    usageCount: Int,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onRename: (String) -> Unit,
+    onMove: (Int) -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by rememberSaveable(category.id) { mutableStateOf(category.label) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (category.isArchived) "Archived: ${category.label}" else "Edit \"${category.label}\"") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    label = { Text("Label") },
+                )
+                Text(
+                    when (usageCount) {
+                        0 -> "Not used in any sample yet — safe to archive."
+                        1 -> "Used in 1 sample. Archiving keeps it in that sample's history."
+                        else -> "Used in $usageCount samples. Archiving keeps it in their history."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!category.isArchived) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Position", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = { onMove(-1) }, enabled = canMoveUp) {
+                            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up")
+                        }
+                        IconButton(onClick = { onMove(+1) }, enabled = canMoveDown) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onRename(text) },
+                enabled = text.isNotBlank() && text.trim() != category.label,
+            ) { Text("Rename") }
+        },
+        dismissButton = {
+            Row {
+                if (category.isArchived) {
+                    TextButton(onClick = onRestore) { Text("Restore") }
+                } else {
+                    TextButton(onClick = onArchive) { Text("Archive") }
+                }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+    )
 }
 
 @Composable
@@ -342,9 +438,8 @@ private fun TextFieldDialog(
     confirmLabel: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
-    extraAction: Pair<String, () -> Unit>? = null,
 ) {
-    var text by remember { mutableStateOf(initial) }
+    var text by rememberSaveable { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -356,13 +451,6 @@ private fun TextFieldDialog(
                 Text(confirmLabel)
             }
         },
-        dismissButton = {
-            Row {
-                extraAction?.let { (label, action) ->
-                    TextButton(onClick = action) { Text(label) }
-                }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
