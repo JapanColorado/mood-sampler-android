@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.russellwhite.moodsampler.data.backup.SettingsDto
 import com.russellwhite.moodsampler.scheduling.SamplingConfig
 import java.time.LocalTime
 import kotlinx.coroutines.flow.Flow
@@ -69,6 +70,15 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingDone() =
         context.dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
+
+    /** Restore sampling preferences from a backup (clamped like the individual setters). */
+    suspend fun replaceAll(dto: SettingsDto) =
+        context.dataStore.edit {
+            it[Keys.WINDOWS_PER_DAY] = dto.windowsPerDay.coerceIn(2, 12)
+            it[Keys.DAY_START_MINUTES] = dto.dayStartMinutes.coerceIn(0, 24 * 60 - 1)
+            it[Keys.DAY_END_MINUTES] = dto.dayEndMinutes.coerceIn(0, 24 * 60 - 1)
+            it[Keys.EXPIRY_MINUTES] = dto.expiryMinutes.coerceIn(5, 120)
+        }
 
     /**
      * Zone ID the upcoming schedule was generated in, or null before the first

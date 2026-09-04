@@ -4,6 +4,7 @@ import android.content.Context
 import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.CsvExporter
 import com.russellwhite.moodsampler.data.SampleRepository
+import com.russellwhite.moodsampler.data.backup.BackupManager
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.settings.OnboardingGate
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
@@ -29,6 +30,13 @@ class AppGraph(context: Context) {
         notifier = promptNotifier,
         clock = DeviceClock,
         onboardingGate = onboardingGate,
+    )
+    val backupManager = BackupManager(
+        context = context,
+        db = database,
+        settings = settingsRepository,
+        scheduler = promptScheduler,
+        appVersionName = BuildConfig.VERSION_NAME,
     )
 }
 

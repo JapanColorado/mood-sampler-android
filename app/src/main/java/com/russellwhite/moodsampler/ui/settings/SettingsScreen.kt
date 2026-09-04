@@ -3,6 +3,8 @@ package com.russellwhite.moodsampler.ui.settings
 import android.app.AlarmManager
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -56,7 +58,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     val settings by viewModel.settings.collectAsState()
     val categoryGroups by viewModel.categoryGroups.collectAsState()
     val usage by viewModel.usage.collectAsState()
+    val pendingRestore by viewModel.pendingRestore.collectAsState()
+    val dataMessage by viewModel.dataMessage.collectAsState()
     val context = LocalContext.current
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> uri?.let(viewModel::backupTo) }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::inspectRestore)
+    }
 
     Column(
         Modifier
@@ -117,10 +128,54 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        backupLauncher.launch("moodsampler-backup-${java.time.LocalDate.now()}.json")
+                    }) { Text("Back up to file…") }
+                    OutlinedButton(onClick = {
+                        // Pickers often mislabel .json files, so accept the usual suspects.
+                        restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
+                    }) { Text("Restore from file…") }
+                }
+                Text(
+                    "A backup holds every prompt, answer, category and sampling setting. " +
+                        "Restoring replaces everything on this phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
         ExactAlarmCard()
+    }
+
+    pendingRestore?.let { pending ->
+        val exported = pending.incoming.exportedAtEpochMs?.let {
+            java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+        } ?: "unknown date"
+        AlertDialog(
+            onDismissRequest = viewModel::cancelRestore,
+            title = { Text("Replace all current data?") },
+            text = {
+                Text(
+                    "This deletes the ${pending.current.samples} samples and ${pending.current.prompts} prompts " +
+                        "on this phone and restores the backup from $exported " +
+                        "(${pending.incoming.samples} samples, ${pending.incoming.prompts} prompts). " +
+                        "The upcoming schedule is redrawn afterwards. This can't be undone.",
+                )
+            },
+            confirmButton = { TextButton(onClick = viewModel::confirmRestore) { Text("Replace") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelRestore) { Text("Cancel") } },
+        )
+    }
+
+    dataMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMessage,
+            title = { Text("Data") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = viewModel::dismissMessage) { Text("OK") } },
+        )
     }
 }
 

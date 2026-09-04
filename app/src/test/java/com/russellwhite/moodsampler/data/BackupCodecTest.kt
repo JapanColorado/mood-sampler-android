@@ -1,0 +1,59 @@
+package com.russellwhite.moodsampler.data
+
+import com.google.common.truth.Truth.assertThat
+import com.russellwhite.moodsampler.data.backup.Backup
+import com.russellwhite.moodsampler.data.backup.BackupCodec
+import com.russellwhite.moodsampler.data.backup.BackupFormatException
+import com.russellwhite.moodsampler.data.backup.CategoryDto
+import com.russellwhite.moodsampler.data.backup.PromptDto
+import com.russellwhite.moodsampler.data.backup.SampleActivityDto
+import com.russellwhite.moodsampler.data.backup.SampleDto
+import com.russellwhite.moodsampler.data.backup.SettingsDto
+import com.russellwhite.moodsampler.data.db.AppDatabase
+import org.junit.Assert.assertThrows
+import org.junit.Test
+
+class BackupCodecTest {
+
+    private val sample = Backup(
+        schemaVersion = AppDatabase.VERSION,
+        appVersionName = "1.1",
+        exportedAtEpochMs = 1_700_000_000_000,
+        settings = SettingsDto(6, 540, 1320, 20),
+        categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false), CategoryDto(2, "LOCATION", "Home", 1, true)),
+        prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
+        samples = listOf(SampleDto(3, 7, 0.5f, -0.25f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000)),
+        sampleActivities = listOf(SampleActivityDto(3, 1)),
+    )
+
+    @Test
+    fun roundTripPreservesEverything() {
+        val decoded = BackupCodec.decode(BackupCodec.encode(sample))
+        assertThat(decoded).isEqualTo(sample)
+    }
+
+    @Test
+    fun unknownKeysAreTolerated() {
+        val text = BackupCodec.encode(sample).replaceFirst("{", "{\"futureField\":123,")
+        assertThat(BackupCodec.decode(text)).isEqualTo(sample)
+    }
+
+    @Test
+    fun newerSchemaIsRejected() {
+        val text = BackupCodec.encode(sample.copy(schemaVersion = AppDatabase.VERSION + 1))
+        val e = assertThrows(BackupFormatException::class.java) { BackupCodec.decode(text) }
+        assertThat(e.message).contains("newer app version")
+    }
+
+    @Test
+    fun newerFormatIsRejected() {
+        val text = BackupCodec.encode(sample.copy(format = Backup.FORMAT + 1))
+        assertThrows(BackupFormatException::class.java) { BackupCodec.decode(text) }
+    }
+
+    @Test
+    fun garbageIsRejectedWithFriendlyMessage() {
+        val e = assertThrows(BackupFormatException::class.java) { BackupCodec.decode("not json at all") }
+        assertThat(e.message).contains("isn't a Mood Sampler backup")
+    }
+}

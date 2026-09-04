@@ -2,10 +2,10 @@
 
 Android app for mood/time tracking via **random experience sampling** (ESM).
 The phone prompts you at random moments during waking hours; each prompt is a
-~15-second capture (mood valence + energy sliders, what/where/with-whom
-quick-picks, optional note). Over weeks this builds a statistically
-representative picture of your mood and time use — unlike diaries, which
-oversample memorable moments.
+~15-second capture (mood valence + energy sliders, a 0–10 physical-pain rating,
+what/where/with-whom quick-picks — several activities at once — and an optional
+note). Over weeks this builds a statistically representative picture of your
+mood and time use — unlike diaries, which oversample memorable moments.
 
 - Kotlin + Jetpack Compose (Material 3), single module, manual DI
 - minSdk 31 (Android 12+), target/compile SDK 35
@@ -16,11 +16,24 @@ oversample memorable moments.
   the day that started them everywhere — stats, charts, and export
 - Prompts expire (default 20 min) and are recorded as **missed** so response
   rates stay honest; expired prompts can't be answered late
+- Notification actions: **Remind me in 5 min** (only while enough time is left;
+  never extends the window) and **Skip**. The capture screen's "Can't answer
+  now" records a skip *reason* (busy, driving, sleeping, not safe, other) —
+  skips still count as missed
+- First-run onboarding explains the method, asks for notification and
+  exact-alarm permission, and sets the sampling day; nothing is scheduled until
+  it finishes
 - Follows the phone's time zone: day start/end are local times, and the
   upcoming schedule is redrawn automatically when the zone changes (travel)
 - The UI never reveals upcoming prompt times — anticipation biases sampling
-- Insights dashboard (mood over time, by time-of-day, by activity/place/company),
-  CSV export via the share sheet
+- Insights dashboard: mood and pain over time, pleasantness by pain level, and a
+  pleasantness / energy / pain toggle for the time-of-day and
+  activity/place/company breakdowns
+- History tab: every prompt by day, note/tag search, edit or delete an answer
+  (deleting marks the prompt CANCELLED — excluded from response rate, not missed)
+- Editable activity/place/company lists: rename, reorder, archive and restore,
+  with per-item usage counts; 28 default activities and 16 default places
+- CSV export via the share sheet; full JSON backup and restore
 
 ## Building
 
@@ -64,14 +77,49 @@ collides with a release install.
    re-armed (BootReceiver).
 6. `adb shell dumpsys deviceidle force-idle` then fire a test prompt →
    still arrives (exact-and-allow-while-idle); `adb shell dumpsys deviceidle unforce`.
-7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts;
-   Settings → Export CSV → share to yourself and eyeball the file.
+7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts,
+   including "Pain over time" and "Pleasantness by pain level"; toggle the
+   breakdown between Pleasantness / Energy / Pain (the axis rescales to 0–10).
+   Settings → Export CSV → share to yourself and eyeball the 12 columns.
 8. Settings → change prompts/day → `pixi run alarms` shows a re-armed schedule.
+9. Fire a test prompt → the notification offers **Skip** and **Remind me in
+   5 min**; snooze → `pixi run alarms` shows the re-show alarm next to the
+   original expiry; after 5 min it re-posts with the remaining time. Set expiry
+   to 5 min → no snooze action. Skip → Home missed +1.
+10. Fire a test prompt → open it → **Can't answer now** → Busy → History shows
+    "Skipped · Busy"; CSV `skip_reason` = `busy`.
+11. History → search a note → tap a row → change the pain rating → Update →
+    row updates. Delete → confirm → row gone, Home response rate unchanged.
+12. Settings → tap a category chip → usage count, ▲▼ reorder, Archive →
+    "Archived (1)" → Restore.
+13. Settings → **Back up to file…** → `adb shell pm clear
+    com.russellwhite.moodsampler.debug` → `pixi run run` → onboarding appears
+    (no Home flash), grant notifications, **Start sampling** → Settings →
+    **Restore from file…** → confirm → History/Insights match, editing an old
+    entry works, `pixi run alarms` shows one re-armed prompt alarm.
+14. Install over a v1 database (real data): Settings lists the new
+    activities/places with "Other" last, old samples keep their activity, and
+    onboarding is skipped.
 
 ## Data
 
-Room DB `moodsampler.db`: `scheduled_prompt` (one row per scheduled prompt,
-status PENDING → NOTIFIED → ANSWERED/MISSED, or CANCELLED on settings change),
-`sample` (the answers), `category` (editable activity/place/company lists;
-archived, never deleted, so history keeps its labels). CSV export includes
-missed prompts as empty rows.
+Room DB `moodsampler.db`, schema v2 (`app/schemas/` holds the exported JSON
+for every version; migrations are explicit — there is no destructive fallback):
+
+- `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
+  ANSWERED/MISSED, or CANCELLED (settings change, or the user deleted the
+  answer). `skipReason` is set when a MISSED prompt was declined on purpose.
+- `sample` — the answers: `valence` and `arousal` in −1..1, `pain` 0–10
+  (null for samples recorded before v2), place and company ids, note.
+- `sample_activity` — many-to-many sample ↔ activity (a sample can tag several).
+- `category` — editable activity/place/company lists; archived, never deleted,
+  so history keeps its labels. The v1→v2 migration back-fills the new default
+  labels for existing installs, skipping any the user already has.
+
+CSV columns: `scheduled_at_iso, answered_at_iso, status, skip_reason, latency_s,
+valence, arousal, pain, activities, location, social, note` — missed prompts
+appear as rows with empty measures; several activities are joined with `; `.
+
+JSON backup (`Settings → Back up to file…`) contains every table plus the
+sampling settings with ids preserved; restore replaces all local data and
+redraws the schedule.

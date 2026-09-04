@@ -32,6 +32,12 @@ interface SampleDao {
     @Query("SELECT COUNT(*) FROM sample")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM sample ORDER BY id")
+    suspend fun getAll(): List<SampleEntity>
+
+    @Query("SELECT * FROM sample_activity ORDER BY sampleId, categoryId")
+    suspend fun getAllActivities(): List<SampleActivityCrossRef>
+
     @Insert
     suspend fun insertActivities(refs: List<SampleActivityCrossRef>)
 

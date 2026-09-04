@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -65,6 +66,7 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.datastore.preferences)
     implementation(libs.vico.compose.m3)
+    implementation(libs.kotlinx.serialization.json)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

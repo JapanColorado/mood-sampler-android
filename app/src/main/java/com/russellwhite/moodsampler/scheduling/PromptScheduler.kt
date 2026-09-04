@@ -153,6 +153,26 @@ class PromptScheduler(
     }
 
     /**
+     * The database was replaced wholesale (backup restore). Alarms and
+     * notifications on this phone refer to prompts that may no longer exist, so
+     * clear everything live and redraw the future under the current settings.
+     */
+    suspend fun onDataReplaced(): Unit = mutex.withLock {
+        alarmManager.cancel(promptPendingIntent(0))
+        notifier.cancelAll()
+        // Imported NOTIFIED rows can't be answered on this phone (their
+        // notification never existed here) — settle them as missed.
+        val live = dao.allNotified()
+        live.forEach {
+            alarmManager.cancel(expiryPendingIntent(it.id))
+            alarmManager.cancel(reshowPendingIntent(it.id))
+        }
+        if (live.isNotEmpty()) dao.markMissed(live.map { it.id })
+        sweepOverdueLocked()
+        regenerateFutureLocked(settings.current().toSamplingConfig(), clock.instant())
+    }
+
+    /**
      * Drop every not-yet-fired prompt and redraw today's remainder plus
      * tomorrow in the phone's current zone. Live (NOTIFIED) prompts keep
      * running out their expiry untouched.

@@ -6,6 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.data.CategoryGroup
 import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.CsvExporter
+import com.russellwhite.moodsampler.data.backup.Backup
+import com.russellwhite.moodsampler.data.backup.BackupFormatException
+import com.russellwhite.moodsampler.data.backup.BackupManager
+import com.russellwhite.moodsampler.data.backup.BackupSummary
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.settings.AppSettings
@@ -17,12 +22,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class PendingRestore(val backup: Backup, val current: BackupSummary, val incoming: BackupSummary)
+
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val categories: CategoryRepository,
     private val scheduler: PromptScheduler,
     private val csvExporter: CsvExporter,
+    private val backupManager: BackupManager,
 ) : ViewModel() {
+
+    /** Pending restore awaiting the user's confirmation, or null. */
+    val pendingRestore = MutableStateFlow<PendingRestore?>(null)
+
+    /** One-shot user-facing result of the last backup/restore action. */
+    val dataMessage = MutableStateFlow<String?>(null)
 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
@@ -76,6 +90,56 @@ class SettingsViewModel(
         viewModelScope.launch { onReady(csvExporter.export()) }
     }
 
+    fun backupTo(uri: Uri) {
+        viewModelScope.launch {
+            dataMessage.value = try {
+                backupManager.export(uri)
+                "Backup saved."
+            } catch (e: Exception) {
+                "Backup failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Parse the picked file; on success ask for confirmation via [pendingRestore]. */
+    fun inspectRestore(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val backup = backupManager.inspect(uri)
+                pendingRestore.value = PendingRestore(
+                    backup = backup,
+                    current = backupManager.currentSummary(),
+                    incoming = BackupSummary(backup.samples.size, backup.prompts.size, backup.exportedAtEpochMs),
+                )
+            } catch (e: BackupFormatException) {
+                dataMessage.value = e.message
+            } catch (e: Exception) {
+                dataMessage.value = "Couldn't read that file: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    fun confirmRestore() {
+        val pending = pendingRestore.value ?: return
+        pendingRestore.value = null
+        viewModelScope.launch {
+            dataMessage.value = try {
+                backupManager.apply(pending.backup)
+                "Restored ${pending.incoming.samples} samples. The upcoming schedule was redrawn."
+            } catch (e: Exception) {
+                "Restore failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    fun cancelRestore() {
+        pendingRestore.value = null
+    }
+
+    fun dismissMessage() {
+        dataMessage.value = null
+    }
+
     companion object {
         val Factory = graphViewModelFactory { graph ->
             SettingsViewModel(
@@ -83,6 +147,7 @@ class SettingsViewModel(
                 categories = graph.categoryRepository,
                 scheduler = graph.promptScheduler,
                 csvExporter = graph.csvExporter,
+                backupManager = graph.backupManager,
             )
         }
     }
