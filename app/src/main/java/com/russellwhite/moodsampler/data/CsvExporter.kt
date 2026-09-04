@@ -35,13 +35,17 @@ class CsvExporter(
     companion object {
         private val ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
+        /** Column order of the export; `activities` joins several labels with "; ". */
+        const val HEADER =
+            "scheduled_at_iso,answered_at_iso,status,skip_reason,latency_s,valence,arousal,pain,activities,location,social,note"
+
         /**
          * Pure CSV formatting (unit-tested). Missed prompts are included with
          * empty measure columns so exported response rates stay honest.
          */
         fun toCsv(rows: List<PromptWithSample>, labels: Map<Long, String>, zone: ZoneId): String {
             val sb = StringBuilder()
-            sb.append("scheduled_at_iso,answered_at_iso,status,latency_s,valence,arousal,activity,location,social,note\r\n")
+            sb.append(HEADER).append("\r\n")
             rows.forEach { row ->
                 val p = row.prompt
                 val s = row.sample?.sample
@@ -52,10 +56,12 @@ class CsvExporter(
                         iso(p.scheduledAtEpochMs, zone),
                         p.answeredAtEpochMs?.let { iso(it, zone) } ?: "",
                         p.status.name,
+                        p.skipReason ?: "",
                         latency?.toString() ?: "",
                         s?.valence?.toString() ?: "",
                         s?.arousal?.toString() ?: "",
-                        activityIds.firstOrNull()?.let { labels[it] } ?: "",
+                        s?.pain?.toString() ?: "",
+                        activityIds.mapNotNull { labels[it] }.joinToString("; "),
                         s?.locationId?.let { labels[it] } ?: "",
                         s?.socialId?.let { labels[it] } ?: "",
                         s?.note ?: "",
