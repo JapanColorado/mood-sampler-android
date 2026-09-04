@@ -3,9 +3,9 @@ package com.russellwhite.moodsampler.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.data.db.AppDatabase
-import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.PromptWithSample
+import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.ui.graphViewModelFactory
@@ -28,12 +28,33 @@ enum class DashboardRange(val label: String, val days: Long?) {
     ALL("All", null),
 }
 
+/** Which per-sample number the breakdown charts show. */
+enum class Measure(val label: String, val min: Double, val max: Double, val diverging: Boolean) {
+    PLEASANTNESS("Pleasantness", -1.0, 1.0, diverging = true),
+    ENERGY("Energy", -1.0, 1.0, diverging = true),
+    PAIN("Pain", 0.0, 10.0, diverging = false);
+
+    /** Null when the sample has no value for this measure (pre-v2 rows have no pain). */
+    fun of(sample: SampleEntity): Double? = when (this) {
+        PLEASANTNESS -> sample.valence.toDouble()
+        ENERGY -> sample.arousal.toDouble()
+        PAIN -> sample.pain?.toDouble()
+    }
+}
+
 data class DayMood(val date: LocalDate, val valence: Double, val arousal: Double, val n: Int)
-data class HourMood(val hour: Int, val valence: Double, val n: Int)
-data class CategoryMood(val label: String, val valence: Double, val n: Int)
+data class DayPain(val date: LocalDate, val pain: Double, val n: Int)
+data class HourMood(val hour: Int, val value: Double, val n: Int)
+data class CategoryMood(val label: String, val value: Double, val n: Int)
+/** Mean pleasantness of the samples rated at one pain level. */
+data class PainLevelMood(val level: Int, val valence: Double, val n: Int)
 
 data class DashboardData(
+    val measure: Measure = Measure.PLEASANTNESS,
     val days: List<DayMood> = emptyList(),
+    val painDays: List<DayPain> = emptyList(),
+    val painByLevel: List<PainLevelMood> = emptyList(),
+    /** Per-hour / per-category means of [measure]. */
     val hours: List<HourMood> = emptyList(),
     val byActivity: List<CategoryMood> = emptyList(),
     val byLocation: List<CategoryMood> = emptyList(),
@@ -52,15 +73,16 @@ class DashboardViewModel(
 ) : ViewModel() {
 
     val range = MutableStateFlow(DashboardRange.TWO_WEEKS)
+    val measure = MutableStateFlow(Measure.PLEASANTNESS)
 
-    val data: StateFlow<DashboardData> = range
-        .flatMapLatest { r ->
+    val data: StateFlow<DashboardData> = combine(range, measure) { r, m -> r to m }
+        .flatMapLatest { (r, m) ->
             val sinceMs = r.days?.let { clock.millis() - it * 24 * 60 * 60 * 1000 } ?: 0L
             combine(
                 db.scheduledPromptDao().concludedPromptsSinceFlow(sinceMs),
                 db.categoryDao().allFlow(),
             ) { prompts, categories ->
-                aggregate(prompts, categories.associate { it.id to it.label })
+                aggregate(prompts, categories.associate { it.id to it.label }, m)
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardData())
@@ -68,11 +90,11 @@ class DashboardViewModel(
     private fun aggregate(
         prompts: List<PromptWithSample>,
         labels: Map<Long, String>,
+        measure: Measure,
     ): DashboardData {
         val zone = clock.zone
         val answered = prompts.filter { it.prompt.status == PromptStatus.ANSWERED && it.sample != null }
         val samples = answered.map { it.prompt to it.sample!!.sample }
-        val activityRefs = answered.flatMap { row -> row.sample!!.activityIds.map { it to row.sample.sample } }
 
         val days = samples
             .groupBy { samplingDate(it.first, zone) }
@@ -86,31 +108,46 @@ class DashboardViewModel(
             }
             .sortedBy { it.date }
 
-        val hours = samples
-            .groupBy {
-                ZonedDateTime.ofInstant(Instant.ofEpochMilli(it.first.scheduledAtEpochMs), zone).hour
-            }
-            .map { (hour, rows) ->
-                HourMood(hour, rows.map { it.second.valence.toDouble() }.average(), rows.size)
-            }
+        val withPain = samples.filter { it.second.pain != null }
+        val painDays = withPain
+            .groupBy { samplingDate(it.first, zone) }
+            .map { (date, rows) -> DayPain(date, rows.map { it.second.pain!!.toDouble() }.average(), rows.size) }
+            .sortedBy { it.date }
+        val painByLevel = withPain
+            .groupBy { it.second.pain!! }
+            .map { (level, rows) -> PainLevelMood(level, rows.map { it.second.valence.toDouble() }.average(), rows.size) }
+            .sortedBy { it.level }
+
+        // Breakdowns of the selected measure; samples lacking it are left out.
+        val measured = samples.mapNotNull { (p, s) -> measure.of(s)?.let { Triple(p, s, it) } }
+
+        val hours = measured
+            .groupBy { ZonedDateTime.ofInstant(Instant.ofEpochMilli(it.first.scheduledAtEpochMs), zone).hour }
+            .map { (hour, rows) -> HourMood(hour, rows.map { it.third }.average(), rows.size) }
             .sortedBy { it.hour }
 
-        fun byCategory(pairs: List<Pair<Long, com.russellwhite.moodsampler.data.db.SampleEntity>>) =
+        fun byCategory(pairs: List<Pair<Long, Double>>) =
             pairs
                 .groupBy({ it.first }, { it.second })
-                .mapNotNull { (id, rows) ->
-                    labels[id]?.let { label ->
-                        CategoryMood(label, rows.map { it.valence.toDouble() }.average(), rows.size)
-                    }
+                .mapNotNull { (id, values) ->
+                    labels[id]?.let { label -> CategoryMood(label, values.average(), values.size) }
                 }
-                .sortedByDescending { it.valence }
+                .sortedByDescending { it.value }
+
+        val activityPairs = answered.flatMap { row ->
+            val value = measure.of(row.sample!!.sample) ?: return@flatMap emptyList()
+            row.sample.activityIds.map { it to value }
+        }
 
         return DashboardData(
+            measure = measure,
             days = days,
+            painDays = painDays,
+            painByLevel = painByLevel,
             hours = hours,
-            byActivity = byCategory(activityRefs),
-            byLocation = byCategory(samples.mapNotNull { (_, s) -> s.locationId?.let { it to s } }),
-            bySocial = byCategory(samples.mapNotNull { (_, s) -> s.socialId?.let { it to s } }),
+            byActivity = byCategory(activityPairs),
+            byLocation = byCategory(measured.mapNotNull { (_, s, v) -> s.locationId?.let { it to v } }),
+            bySocial = byCategory(measured.mapNotNull { (_, s, v) -> s.socialId?.let { it to v } }),
             answered = answered.size,
             missed = prompts.count { it.prompt.status == PromptStatus.MISSED },
         )

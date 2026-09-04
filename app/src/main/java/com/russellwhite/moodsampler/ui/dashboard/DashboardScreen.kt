@@ -24,11 +24,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.ui.dashboard.charts.CategoryBars
 import com.russellwhite.moodsampler.ui.dashboard.charts.HourOfDayChart
 import com.russellwhite.moodsampler.ui.dashboard.charts.MoodTimeSeriesChart
+import com.russellwhite.moodsampler.ui.dashboard.charts.PainLevelChart
+import com.russellwhite.moodsampler.ui.dashboard.charts.PainTimeSeriesChart
 
 @Composable
 fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)) {
     val data by viewModel.data.collectAsState()
     val range by viewModel.range.collectAsState()
+    val measure by viewModel.measure.collectAsState()
 
     Column(
         Modifier
@@ -73,25 +76,61 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
             }
         }
 
-        Section("Pleasantness by time of day", "Mean across all sampled days") {
-            if (data.hours.isNotEmpty()) {
-                HourOfDayChart(data.hours)
-            } else {
-                SectionPlaceholder("No samples yet.")
+        Section("Pain over time", "Daily mean; 0 (none) to 10") {
+            when {
+                data.painDays.size >= 2 -> PainTimeSeriesChart(data.painDays)
+                data.painDays.isEmpty() -> SectionPlaceholder("No pain ratings yet.")
+                else -> SectionPlaceholder("Needs at least two days of pain ratings.")
             }
         }
 
-        Section("By activity", "Mean pleasantness while doing…") {
-            CategoryBarsOrPlaceholder(data.byActivity)
+        Section("Pleasantness by pain level", "How mood tracks pain, 0–10") {
+            if (data.painByLevel.size >= 2) {
+                PainLevelChart(data.painByLevel)
+            } else {
+                SectionPlaceholder("Needs samples at two or more pain levels.")
+            }
         }
-        Section("By place", "Mean pleasantness while at…") {
-            CategoryBarsOrPlaceholder(data.byLocation)
+
+        // Breakdown measure: drives the hour chart and the three category sections.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Break down by", style = MaterialTheme.typography.titleSmall)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                Measure.entries.forEachIndexed { index, m ->
+                    SegmentedButton(
+                        selected = measure == m,
+                        onClick = { viewModel.measure.value = m },
+                        shape = SegmentedButtonDefaults.itemShape(index, Measure.entries.size),
+                    ) { Text(m.label) }
+                }
+            }
         }
-        Section("By company", "Mean pleasantness while with…") {
-            CategoryBarsOrPlaceholder(data.bySocial)
+
+        // `data.measure` (not `measure`) so charts and labels flip together once the recompute lands.
+        val shown = data.measure
+        val word = shown.label.lowercase()
+        Section("${shown.label} by time of day", "Mean across all sampled days") {
+            if (data.hours.isNotEmpty()) {
+                HourOfDayChart(data.hours, shown)
+            } else {
+                SectionPlaceholder(noMeasureText(shown))
+            }
+        }
+
+        Section("By activity", "Mean $word while doing… (a sample counts under each activity it tagged)") {
+            CategoryBarsOrPlaceholder(data.byActivity, shown)
+        }
+        Section("By place", "Mean $word while at…") {
+            CategoryBarsOrPlaceholder(data.byLocation, shown)
+        }
+        Section("By company", "Mean $word while with…") {
+            CategoryBarsOrPlaceholder(data.bySocial, shown)
         }
     }
 }
+
+private fun noMeasureText(measure: Measure) =
+    if (measure == Measure.PAIN) "No pain ratings yet." else "No samples yet."
 
 @Composable
 private fun Section(title: String, subtitle: String, content: @Composable () -> Unit) {
@@ -111,8 +150,8 @@ private fun Section(title: String, subtitle: String, content: @Composable () -> 
 }
 
 @Composable
-private fun CategoryBarsOrPlaceholder(rows: List<CategoryMood>) {
-    if (rows.isEmpty()) SectionPlaceholder("No categorized samples yet.") else CategoryBars(rows)
+private fun CategoryBarsOrPlaceholder(rows: List<CategoryMood>, measure: Measure) {
+    if (rows.isEmpty()) SectionPlaceholder("No categorized samples yet.") else CategoryBars(rows, measure)
 }
 
 @Composable
