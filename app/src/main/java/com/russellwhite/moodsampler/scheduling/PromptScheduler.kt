@@ -86,6 +86,18 @@ class PromptScheduler(
         notifier.cancel(promptId)
     }
 
+    /**
+     * User declined the prompt on purpose. Recorded as MISSED (so response rates
+     * stay honest) with [reason] attached; the expiry alarm and notification go away.
+     */
+    suspend fun onPromptSkipped(promptId: Long, reason: String) {
+        val skipped = mutex.withLock { dao.markSkipped(promptId, reason) }
+        if (skipped == 1) {
+            alarmManager.cancel(expiryPendingIntent(promptId))
+            notifier.cancel(promptId)
+        }
+    }
+
     /** Sampling settings changed: drop the stale future schedule and regenerate. */
     suspend fun onConfigChanged(): Unit = mutex.withLock {
         sweepOverdueLocked()

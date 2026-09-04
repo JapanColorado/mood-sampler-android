@@ -3,6 +3,7 @@ package com.russellwhite.moodsampler.ui.capture
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.AppGraph
+import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
@@ -32,6 +33,9 @@ sealed interface CaptureUiState {
     data object AlreadyAnswered : CaptureUiState
 
     data object Saved : CaptureUiState
+
+    /** User declined via "Can't answer now" — recorded as MISSED with a reason. */
+    data object Skipped : CaptureUiState
 }
 
 class CaptureViewModel(
@@ -74,27 +78,21 @@ class CaptureViewModel(
     private fun pastExpiry(sinceMs: Long): Boolean =
         clock.millis() - sinceMs > expiryMinutes * 60_000L
 
-    fun save(
-        valence: Float,
-        arousal: Float,
-        activityId: Long?,
-        locationId: Long?,
-        socialId: Long?,
-        note: String,
-    ) {
+    fun save(values: CaptureFormValues) {
         if (_state.value != CaptureUiState.Answerable) return
         viewModelScope.launch {
             val ok = sampleRepository.saveAnswer(
                 SampleEntity(
                     promptId = promptId,
-                    valence = valence.coerceIn(-1f, 1f),
-                    arousal = arousal.coerceIn(-1f, 1f),
-                    locationId = locationId,
-                    socialId = socialId,
-                    note = note.trim().ifEmpty { null },
+                    valence = values.valence.coerceIn(-1f, 1f),
+                    arousal = values.arousal.coerceIn(-1f, 1f),
+                    pain = values.pain.coerceIn(PainScale.MIN, PainScale.MAX),
+                    locationId = values.locationId,
+                    socialId = values.socialId,
+                    note = values.note.trim().ifEmpty { null },
                     createdAtEpochMs = 0,  // stamped by the repository
                 ),
-                activityIds = listOfNotNull(activityId),
+                activityIds = values.activityIds,
                 answeredAtMs = clock.millis(),
             )
             if (ok) {
@@ -103,6 +101,14 @@ class CaptureViewModel(
             } else {
                 _state.value = CaptureUiState.Expired
             }
+        }
+    }
+
+    fun skip(reason: String) {
+        if (_state.value != CaptureUiState.Answerable) return
+        viewModelScope.launch {
+            scheduler.onPromptSkipped(promptId, reason)
+            _state.value = CaptureUiState.Skipped
         }
     }
 
