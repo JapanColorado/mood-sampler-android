@@ -38,6 +38,9 @@ class SettingsViewModel(
     /** One-shot user-facing result of the last backup/restore action. */
     val dataMessage = MutableStateFlow<String?>(null)
 
+    /** Non-null while the "Delete all data" confirmation is showing (what would be deleted). */
+    val pendingWipe = MutableStateFlow<BackupSummary?>(null)
+
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
 
@@ -134,6 +137,27 @@ class SettingsViewModel(
 
     fun cancelRestore() {
         pendingRestore.value = null
+    }
+
+    fun askDeleteAll() {
+        viewModelScope.launch { pendingWipe.value = backupManager.currentSummary() }
+    }
+
+    fun cancelDeleteAll() {
+        pendingWipe.value = null
+    }
+
+    fun confirmDeleteAll() {
+        val summary = pendingWipe.value ?: return
+        pendingWipe.value = null
+        viewModelScope.launch {
+            dataMessage.value = try {
+                backupManager.deleteSamplesAndPrompts()
+                "Deleted ${summary.samples} samples and ${summary.prompts} prompts. Sampling continues with a fresh schedule."
+            } catch (e: Exception) {
+                "Delete failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
     }
 
     fun dismissMessage() {

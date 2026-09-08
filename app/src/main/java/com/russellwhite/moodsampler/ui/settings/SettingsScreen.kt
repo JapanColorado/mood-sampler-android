@@ -22,7 +22,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +62,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     val categoryGroups by viewModel.categoryGroups.collectAsState()
     val usage by viewModel.usage.collectAsState()
     val pendingRestore by viewModel.pendingRestore.collectAsState()
+    val pendingWipe by viewModel.pendingWipe.collectAsState()
     val dataMessage by viewModel.dataMessage.collectAsState()
     val context = LocalContext.current
 
@@ -143,6 +147,18 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                HorizontalDivider()
+                OutlinedButton(
+                    onClick = viewModel::askDeleteAll,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                ) { Text("Delete all data…") }
+                Text(
+                    "Removes every answer and prompt. Your category lists and sampling " +
+                        "settings stay. Back up first if you might want the data later.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -166,6 +182,27 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
             },
             confirmButton = { TextButton(onClick = viewModel::confirmRestore) { Text("Replace") } },
             dismissButton = { TextButton(onClick = viewModel::cancelRestore) { Text("Cancel") } },
+        )
+    }
+
+    pendingWipe?.let { summary ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelDeleteAll,
+            title = { Text("Delete all data?") },
+            text = {
+                Text(
+                    "This permanently deletes ${summary.samples} samples and ${summary.prompts} prompts " +
+                        "from this phone. Categories and settings are kept, and a fresh schedule is drawn. " +
+                        "This can't be undone — export a backup first if in doubt.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::confirmDeleteAll,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete everything") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cancelDeleteAll) { Text("Cancel") } },
         )
     }
 

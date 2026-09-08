@@ -48,6 +48,20 @@ class BackupManager(
         BackupCodec.decode(text)
     }
 
+    /**
+     * "Delete all data": every answer and every prompt, in one transaction.
+     * Categories and sampling settings are kept. The schedule is redrawn so
+     * sampling continues from a clean slate.
+     */
+    suspend fun deleteSamplesAndPrompts() {
+        db.withTransaction {
+            db.sampleDao().deleteAllActivities()
+            db.sampleDao().deleteAll()
+            db.scheduledPromptDao().deleteAll()
+        }
+        scheduler.onDataReplaced()
+    }
+
     suspend fun currentSummary() = BackupSummary(
         samples = db.sampleDao().count(),
         prompts = db.scheduledPromptDao().count(),

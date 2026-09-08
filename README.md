@@ -33,7 +33,9 @@ mood and time use — unlike diaries, which oversample memorable moments.
   (deleting marks the prompt CANCELLED — excluded from response rate, not missed)
 - Editable activity/place/company lists: rename, reorder, archive and restore,
   with per-item usage counts; 28 default activities and 16 default places
-- CSV export via the share sheet; full JSON backup and restore
+- CSV export via the share sheet; full JSON backup and restore; "Delete all
+  data" (answers and prompts only — categories and settings stay) behind a
+  confirmation that states the counts
 
 ## Building
 
