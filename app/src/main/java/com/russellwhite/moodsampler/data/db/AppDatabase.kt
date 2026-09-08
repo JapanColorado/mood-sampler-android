@@ -24,8 +24,11 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         const val VERSION = 2
 
-        fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "moodsampler.db")
+        const val NAME = "moodsampler.db"
+
+        /** [name] is overridable so instrumented tests never touch the real database. */
+        fun build(context: Context, name: String = NAME): AppDatabase =
+            Room.databaseBuilder(context, AppDatabase::class.java, name)
                 .addMigrations(MIGRATION_1_2)
                 .addCallback(SeedCallback)
                 .build()

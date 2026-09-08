@@ -22,6 +22,11 @@ class DaoTest {
 
     private lateinit var db: AppDatabase
 
+    private companion object {
+        /** Never the real app database — the instrumented run shares the app's data dir. */
+        const val SEED_TEST_DB = "dao-seed-test.db"
+    }
+
     @Before
     fun setup() {
         db = Room.inMemoryDatabaseBuilder(
@@ -150,7 +155,9 @@ class DaoTest {
     fun seedDefaults_arePresentInPersistentDbCallback() = runTest {
         // In-memory DB also runs the callback only via AppDatabase.build; here we
         // just verify the DEFAULT_CATEGORIES constant wiring through a built DB.
-        val seeded = AppDatabase.build(ApplicationProvider.getApplicationContext())
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.deleteDatabase(SEED_TEST_DB)
+        val seeded = AppDatabase.build(context, SEED_TEST_DB)
         try {
             val all = seeded.categoryDao().getAll()
             assertThat(all.map { it.label }).containsAtLeast("Work", "Home", "Alone", "Gaming", "Gym")
@@ -158,8 +165,7 @@ class DaoTest {
             assertThat(activities.last().label).isEqualTo("Other")
         } finally {
             seeded.close()
-            ApplicationProvider.getApplicationContext<android.content.Context>()
-                .deleteDatabase("moodsampler.db")
+            context.deleteDatabase(SEED_TEST_DB)
         }
     }
 
