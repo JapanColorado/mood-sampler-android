@@ -70,11 +70,12 @@ pixi run bootstrap    # only if gradle/wrapper is missing
 Day-to-day (pixi tasks wrap `./gradlew`):
 
 ```sh
-pixi run build            # assembleDebug
+pixi run build            # assembleRelease (signed if keystore.properties exists)
 pixi run test             # JVM unit tests (schedule generator, CSV format)
-pixi run install          # install debug build on the connected phone
+pixi run install          # install release build on the connected phone
 pixi run connected-test   # instrumented Room DAO tests (device required)
-pixi run run              # install + launch
+pixi run run              # install release + launch
+pixi run build-debug / install-debug / run-debug   # debug variant (.debug appId)
 pixi run alarms           # inspect armed alarms via dumpsys
 pixi run logs             # filtered logcat
 ```
