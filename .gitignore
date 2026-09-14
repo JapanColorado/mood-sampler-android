@@ -8,3 +8,6 @@ local.properties
 captures/
 .cxx/
 .local-backups/
+
+# Release signing (keystore lives outside the repo)
+keystore.properties
