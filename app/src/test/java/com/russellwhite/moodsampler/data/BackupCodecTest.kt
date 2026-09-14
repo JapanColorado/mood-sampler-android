@@ -9,6 +9,7 @@ import com.russellwhite.moodsampler.data.backup.PromptDto
 import com.russellwhite.moodsampler.data.backup.SampleActivityDto
 import com.russellwhite.moodsampler.data.backup.SampleDto
 import com.russellwhite.moodsampler.data.backup.SettingsDto
+import com.russellwhite.moodsampler.data.backup.toEntity
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -20,9 +21,9 @@ class BackupCodecTest {
         appVersionName = "1.1",
         exportedAtEpochMs = 1_700_000_000_000,
         settings = SettingsDto(6, 540, 1320, 20),
-        categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false), CategoryDto(2, "LOCATION", "Home", 1, true)),
+        categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"), CategoryDto(2, "LOCATION", "Home", 1, true)),
         prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
-        samples = listOf(SampleDto(3, 7, 0.5f, -0.25f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000)),
+        samples = listOf(SampleDto(3, 7, 0.5f, -0.25f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000)),
         sampleActivities = listOf(SampleActivityDto(3, 1)),
     )
 
@@ -36,6 +37,22 @@ class BackupCodecTest {
     fun unknownKeysAreTolerated() {
         val text = BackupCodec.encode(sample).replaceFirst("{", "{\"futureField\":123,")
         assertThat(BackupCodec.decode(text)).isEqualTo(sample)
+    }
+
+    @Test
+    fun preV3BackupDecodesWithDefaults() {
+        // Shape of a v2-era file: no groups, no coordinates, no autoLocation.
+        val text = """{"format":1,"schemaVersion":2,"appVersionName":"1.1","exportedAtEpochMs":1,
+            "settings":{"windowsPerDay":6,"dayStartMinutes":540,"dayEndMinutes":1320,"expiryMinutes":20},
+            "categories":[{"id":1,"type":"ACTIVITY","label":"Work","sortOrder":1,"archived":false}],
+            "prompts":[],
+            "samples":[{"id":3,"promptId":7,"valence":0.5,"arousal":0.0,"pain":4,"createdAtEpochMs":1}],
+            "sampleActivities":[]}"""
+        val decoded = BackupCodec.decode(text)
+        assertThat(decoded.settings.autoLocation).isTrue()
+        assertThat(decoded.categories.single().group).isNull()
+        assertThat(decoded.categories.single().toEntity().group).isEqualTo("WORK")
+        assertThat(decoded.samples.single().latitude).isNull()
     }
 
     @Test

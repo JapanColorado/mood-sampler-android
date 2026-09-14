@@ -79,12 +79,42 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         )
     }
 
-    private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
+}
+
+/**
+ * v2 → v3:
+ *  - `sample.latitude/longitude/accuracyM/fixAtEpochMs` (all nullable) for the
+ *    one-off location fix taken while answering;
+ *  - `category.groupKey` (nullable) — the [ActivityGroup] of each activity,
+ *    back-filled for the default labels; anything else becomes OTHER.
+ * All additive, so plain ALTERs keep the tables' declared shape identical to 3.json.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sample` ADD COLUMN `latitude` REAL")
+        db.execSQL("ALTER TABLE `sample` ADD COLUMN `longitude` REAL")
+        db.execSQL("ALTER TABLE `sample` ADD COLUMN `accuracyM` REAL")
+        db.execSQL("ALTER TABLE `sample` ADD COLUMN `fixAtEpochMs` INTEGER")
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `groupKey` TEXT")
+
+        DefaultCategories.ACTIVITY_GROUPS.forEach { (label, group) ->
+            db.execSQL(
+                "UPDATE `category` SET `groupKey` = ? WHERE `type` = 'ACTIVITY' AND lower(`label`) = ?",
+                arrayOf<Any>(group.name, label),
+            )
+        }
         db.execSQL(
-            """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)
-               SELECT ?, ?, (SELECT COALESCE(MAX(`sortOrder`), 0) + 1 FROM `category` WHERE `type` = ?), 0
-               WHERE NOT EXISTS (SELECT 1 FROM `category` WHERE `type` = ? AND lower(`label`) = lower(?))""",
-            arrayOf<Any>(type.name, label, type.name, type.name, label),
+            "UPDATE `category` SET `groupKey` = ? WHERE `type` = 'ACTIVITY' AND `groupKey` IS NULL",
+            arrayOf<Any>(ActivityGroup.OTHER.name),
         )
     }
+}
+
+private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
+    db.execSQL(
+        """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)
+           SELECT ?, ?, (SELECT COALESCE(MAX(`sortOrder`), 0) + 1 FROM `category` WHERE `type` = ?), 0
+           WHERE NOT EXISTS (SELECT 1 FROM `category` WHERE `type` = ? AND lower(`label`) = lower(?))""",
+        arrayOf<Any>(type.name, label, type.name, type.name, label),
+    )
 }

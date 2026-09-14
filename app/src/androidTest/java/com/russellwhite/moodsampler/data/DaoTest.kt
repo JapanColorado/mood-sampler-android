@@ -47,6 +47,21 @@ class DaoTest {
         )
 
     @Test
+    fun recentGeoTags_returnsOnlyGeotaggedSamplesWithPlace() = runTest {
+        val prompts = db.scheduledPromptDao()
+        val samples = db.sampleDao()
+        val ids = (1..3).map { prompts.insert(prompt(it * 1_000L, PromptStatus.ANSWERED)) }
+        samples.insert(SampleEntity(promptId = ids[0], valence = 0f, arousal = 0f, locationId = 7, socialId = null, note = null, createdAtEpochMs = 1, latitude = 40.0, longitude = -105.0, accuracyM = 5f, fixAtEpochMs = 1))
+        samples.insert(SampleEntity(promptId = ids[1], valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 2, latitude = 40.0, longitude = -105.0))
+        samples.insert(SampleEntity(promptId = ids[2], valence = 0f, arousal = 0f, locationId = 8, socialId = null, note = null, createdAtEpochMs = 3))
+
+        val tags = samples.recentGeoTags()
+        assertThat(tags).hasSize(1)
+        assertThat(tags.single().locationId).isEqualTo(7)
+        assertThat(tags.single().latitude).isEqualTo(40.0)
+    }
+
+    @Test
     fun nextPending_returnsEarliestFuturePending() = runTest {
         val dao = db.scheduledPromptDao()
         dao.insertAll(listOf(prompt(1_000), prompt(3_000), prompt(2_000)))

@@ -7,6 +7,9 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
+/** A past answer's coordinates and the place the user picked — the training set for place suggestions. */
+data class GeoTag(val locationId: Long, val latitude: Double, val longitude: Double)
+
 /** How many samples reference a category (activities via the join table, place/company directly). */
 data class CategoryUsage(val categoryId: Long, val n: Int)
 
@@ -52,6 +55,14 @@ interface SampleDao {
            SELECT socialId AS categoryId, COUNT(*) AS n FROM sample WHERE socialId IS NOT NULL GROUP BY socialId"""
     )
     fun categoryUsageFlow(): Flow<List<CategoryUsage>>
+
+    /** Most recent geotagged answers that also carry a place, newest first. */
+    @Query(
+        """SELECT locationId, latitude, longitude FROM sample
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND locationId IS NOT NULL
+           ORDER BY id DESC LIMIT :limit"""
+    )
+    suspend fun recentGeoTags(limit: Int = 500): List<GeoTag>
 
     @Query("DELETE FROM sample_activity")
     suspend fun deleteAllActivities()

@@ -1,6 +1,7 @@
 package com.russellwhite.moodsampler.data
 
 import androidx.room.withTransaction
+import com.russellwhite.moodsampler.data.db.ActivityGroup
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
@@ -33,7 +34,14 @@ class CategoryRepository(private val db: AppDatabase) {
     suspend fun add(type: CategoryType, label: String) {
         val trimmed = label.trim()
         if (trimmed.isEmpty()) return
-        dao.insert(CategoryEntity(type = type, label = trimmed, sortOrder = dao.maxSortOrder(type) + 1))
+        val group = if (type == CategoryType.ACTIVITY) ActivityGroup.OTHER.name else null
+        dao.insert(CategoryEntity(type = type, label = trimmed, sortOrder = dao.maxSortOrder(type) + 1, group = group))
+    }
+
+    /** Move an activity to another [ActivityGroup]; no-op for other types. */
+    suspend fun setGroup(category: CategoryEntity, group: ActivityGroup) {
+        if (category.type != CategoryType.ACTIVITY) return
+        dao.update(category.copy(group = group.name))
     }
 
     suspend fun rename(category: CategoryEntity, label: String) {

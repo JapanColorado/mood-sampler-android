@@ -27,6 +27,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,8 +52,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.russellwhite.moodsampler.ui.capture.GroupHeader
+import com.russellwhite.moodsampler.ui.rememberLocationPermission
 import com.russellwhite.moodsampler.data.CategoryGroup
+import com.russellwhite.moodsampler.data.db.ActivityGroup
 import com.russellwhite.moodsampler.data.db.CategoryEntity
+import com.russellwhite.moodsampler.data.db.activityGroup
+import com.russellwhite.moodsampler.data.db.byActivityGroup
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.settings.AppSettings
 import java.time.ZoneId
@@ -107,6 +116,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
         }
 
         TimeZoneCard()
+
+        LocationCard(enabled = settings.autoLocation, onToggle = viewModel::setAutoLocation)
 
         CategoryEditorCard("Activities", CategoryType.ACTIVITY, categoryGroups, usage, viewModel)
         CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
@@ -245,6 +256,35 @@ private fun TimeZoneCard() {
     }
 }
 
+/** Opt-in one-shot location per answer, plus the runtime permission it needs. */
+@Composable
+private fun LocationCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val permission = rememberLocationPermission()
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Record location with each answer", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Switch(checked = enabled, onCheckedChange = onToggle)
+            }
+            Text(
+                "One fix per answer, only while the capture screen is open — no background tracking. " +
+                    "Used to pre-select your place from where you answered before. " +
+                    "Never leaves the phone except in your own exports.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (enabled && !permission.granted) {
+                Text(
+                    "Location permission is off, so nothing is recorded.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedButton(onClick = permission.request) { Text("Allow location") }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ExactAlarmCard() {
     val context = LocalContext.current
@@ -289,6 +329,7 @@ private fun CategoryEditorCard(
     viewModel: SettingsViewModel,
 ) {
     val group = groups[type] ?: CategoryGroup()
+    val grouped = type == CategoryType.ACTIVITY
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var showArchived by rememberSaveable { mutableStateOf(false) }
@@ -301,13 +342,22 @@ private fun CategoryEditorCard(
                     Icon(Icons.Filled.Add, contentDescription = "Add $title")
                 }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                group.active.forEach { category ->
-                    AssistChip(onClick = { editingId = category.id }, label = { Text(category.label) })
+            // Activities are shown under their group headers; other types as one flat row.
+            val sections: List<Pair<String?, List<CategoryEntity>>> = remember(group.active, grouped) {
+                if (grouped) group.active.byActivityGroup().map { (g, items) -> g.label to items }
+                else listOf(null to group.active)
+            }
+            sections.forEach { (header, items) ->
+                if (header != null) GroupHeader(header)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items.forEach { category ->
+                        AssistChip(onClick = { editingId = category.id }, label = { Text(category.label) })
+                    }
                 }
             }
             Text(
-                "Tap a chip to rename, reorder or archive it. Archived items keep their history.",
+                "Tap a chip to rename, ${if (grouped) "regroup, " else ""}reorder or archive it. " +
+                    "Archived items keep their history.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -353,6 +403,7 @@ private fun CategoryEditorCard(
             canMoveUp = index > 0,
             canMoveDown = index >= 0 && index < group.active.lastIndex,
             onRename = { viewModel.renameCategory(category, it); editingId = null },
+            onGroup = if (grouped) { g -> viewModel.setActivityGroup(category, g) } else null,
             onMove = { viewModel.moveCategory(category, it) },
             onArchive = { viewModel.archiveCategory(category); editingId = null },
             onRestore = { viewModel.restoreCategory(category); editingId = null },
@@ -368,6 +419,8 @@ private fun CategoryEditDialog(
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onRename: (String) -> Unit,
+    /** Present for activities only. */
+    onGroup: ((ActivityGroup) -> Unit)?,
     onMove: (Int) -> Unit,
     onArchive: () -> Unit,
     onRestore: () -> Unit,
@@ -394,6 +447,9 @@ private fun CategoryEditDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (onGroup != null) {
+                    GroupDropdown(current = category.activityGroup, onSelect = onGroup)
+                }
                 if (!category.isArchived) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Position", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -424,6 +480,28 @@ private fun CategoryEditDialog(
             }
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupDropdown(current: ActivityGroup, onSelect: (ActivityGroup) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value = current.label,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Group") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier.menuAnchor(),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ActivityGroup.entries.forEach { g ->
+                DropdownMenuItem(text = { Text(g.label) }, onClick = { onSelect(g); open = false })
+            }
+        }
+    }
 }
 
 @Composable

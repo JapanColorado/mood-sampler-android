@@ -11,6 +11,7 @@ import com.russellwhite.moodsampler.data.backup.BackupFormatException
 import com.russellwhite.moodsampler.data.backup.BackupManager
 import com.russellwhite.moodsampler.data.backup.BackupSummary
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.russellwhite.moodsampler.data.db.ActivityGroup
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.settings.AppSettings
@@ -57,6 +58,10 @@ class SettingsViewModel(
 
     fun setDayEnd(minutes: Int) = updateSampling { settingsRepository.setDayEndMinutes(minutes) }
 
+    fun setAutoLocation(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoLocation(enabled) }
+    }
+
     fun setExpiryMinutes(value: Int) {
         viewModelScope.launch { settingsRepository.setExpiryMinutes(value) }
     }
@@ -83,6 +88,10 @@ class SettingsViewModel(
 
     fun restoreCategory(category: CategoryEntity) {
         viewModelScope.launch { categories.setArchived(category, false) }
+    }
+
+    fun setActivityGroup(category: CategoryEntity, group: ActivityGroup) {
+        viewModelScope.launch { categories.setGroup(category, group) }
     }
 
     fun moveCategory(category: CategoryEntity, delta: Int) {

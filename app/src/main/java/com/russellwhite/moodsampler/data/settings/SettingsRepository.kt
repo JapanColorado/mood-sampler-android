@@ -23,6 +23,8 @@ data class AppSettings(
     val dayEndMinutes: Int = 22 * 60,
     val expiryMinutes: Int = 20,
     val onboardingDone: Boolean = false,
+    /** Take one location fix while answering a prompt (needs the location permission). */
+    val autoLocation: Boolean = true,
 ) {
     fun toSamplingConfig() = SamplingConfig(
         dayStart = LocalTime.ofSecondOfDay(dayStartMinutes * 60L),
@@ -41,6 +43,7 @@ class SettingsRepository(private val context: Context) {
         val EXPIRY_MINUTES = intPreferencesKey("expiry_minutes")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         val SCHEDULE_ZONE_ID = stringPreferencesKey("schedule_zone_id")
+        val AUTO_LOCATION = booleanPreferencesKey("auto_location")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -51,6 +54,7 @@ class SettingsRepository(private val context: Context) {
             dayEndMinutes = prefs[Keys.DAY_END_MINUTES] ?: defaults.dayEndMinutes,
             expiryMinutes = prefs[Keys.EXPIRY_MINUTES] ?: defaults.expiryMinutes,
             onboardingDone = prefs[Keys.ONBOARDING_DONE] ?: defaults.onboardingDone,
+            autoLocation = prefs[Keys.AUTO_LOCATION] ?: defaults.autoLocation,
         )
     }
 
@@ -68,6 +72,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setExpiryMinutes(value: Int) =
         context.dataStore.edit { it[Keys.EXPIRY_MINUTES] = value.coerceIn(5, 120) }
 
+    suspend fun setAutoLocation(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.AUTO_LOCATION] = enabled }
+
     suspend fun setOnboardingDone() =
         context.dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
 
@@ -78,6 +85,7 @@ class SettingsRepository(private val context: Context) {
             it[Keys.DAY_START_MINUTES] = dto.dayStartMinutes.coerceIn(0, 24 * 60 - 1)
             it[Keys.DAY_END_MINUTES] = dto.dayEndMinutes.coerceIn(0, 24 * 60 - 1)
             it[Keys.EXPIRY_MINUTES] = dto.expiryMinutes.coerceIn(5, 120)
+            it[Keys.AUTO_LOCATION] = dto.autoLocation
         }
 
     /**

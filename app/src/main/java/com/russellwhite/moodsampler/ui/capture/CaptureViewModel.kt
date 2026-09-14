@@ -10,6 +10,9 @@ import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleEntity
+import com.russellwhite.moodsampler.data.location.LocationFix
+import com.russellwhite.moodsampler.data.location.LocationProvider
+import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
 import com.russellwhite.moodsampler.scheduling.DeviceClock
 import com.russellwhite.moodsampler.scheduling.PromptScheduler
@@ -38,12 +41,23 @@ sealed interface CaptureUiState {
     data object Skipped : CaptureUiState
 }
 
+/** Progress of the one-shot location fix shown as a caption on the form. */
+sealed interface LocationStatus {
+    /** Auto-location disabled in settings or permission not granted. */
+    data object Off : LocationStatus
+    data object Acquiring : LocationStatus
+    data class Got(val accuracyM: Float?) : LocationStatus
+    data object Unavailable : LocationStatus
+}
+
 class CaptureViewModel(
     private val promptId: Long,
     private val db: AppDatabase,
     private val sampleRepository: SampleRepository,
     private val scheduler: PromptScheduler,
     settings: SettingsRepository,
+    categoryRepository: CategoryRepository,
+    private val locationProvider: LocationProvider,
     private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
@@ -53,12 +67,25 @@ class CaptureViewModel(
     val activities = categories(CategoryType.ACTIVITY)
     val locations = categories(CategoryType.LOCATION)
     val socials = categories(CategoryType.SOCIAL)
+    val usage = categoryRepository.usage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    private val _locationStatus = MutableStateFlow<LocationStatus>(LocationStatus.Off)
+    val locationStatus: StateFlow<LocationStatus> = _locationStatus
+
+    /** The fix to stamp on the sample; null until acquired (or forever, if unavailable). */
+    private var fix: LocationFix? = null
+
+    /** Place matched from past answers near the fix; null when nothing is close enough. */
+    private val _suggestedLocationId = MutableStateFlow<Long?>(null)
+    val suggestedLocationId: StateFlow<Long?> = _suggestedLocationId
 
     private var expiryMinutes = 20
 
     init {
         viewModelScope.launch {
-            expiryMinutes = settings.current().expiryMinutes
+            val current = settings.current()
+            expiryMinutes = current.expiryMinutes
             val prompt = db.scheduledPromptDao().getById(promptId)
             _state.value = when {
                 prompt == null -> CaptureUiState.Expired
@@ -72,6 +99,23 @@ class CaptureViewModel(
                 }
                 else -> CaptureUiState.Answerable
             }
+            if (_state.value == CaptureUiState.Answerable && current.autoLocation && locationProvider.hasPermission()) {
+                acquireLocation()
+            }
+        }
+    }
+
+    private fun acquireLocation() {
+        _locationStatus.value = LocationStatus.Acquiring
+        viewModelScope.launch {
+            val got = locationProvider.currentFix()
+            if (got == null) {
+                _locationStatus.value = LocationStatus.Unavailable
+                return@launch
+            }
+            fix = got
+            _locationStatus.value = LocationStatus.Got(got.accuracyM)
+            _suggestedLocationId.value = sampleRepository.suggestPlace(got)
         }
     }
 
@@ -91,6 +135,10 @@ class CaptureViewModel(
                     socialId = values.socialId,
                     note = values.note.trim().ifEmpty { null },
                     createdAtEpochMs = 0,  // stamped by the repository
+                    latitude = fix?.latitude,
+                    longitude = fix?.longitude,
+                    accuracyM = fix?.accuracyM,
+                    fixAtEpochMs = fix?.atEpochMs,
                 ),
                 activityIds = values.activityIds,
                 answeredAtMs = clock.millis(),
@@ -124,6 +172,8 @@ class CaptureViewModel(
                 sampleRepository = graph.sampleRepository,
                 scheduler = graph.promptScheduler,
                 settings = graph.settingsRepository,
+                categoryRepository = graph.categoryRepository,
+                locationProvider = graph.locationProvider,
             )
         }
     }

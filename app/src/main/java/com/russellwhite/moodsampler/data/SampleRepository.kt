@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.SampleActivityCrossRef
 import com.russellwhite.moodsampler.data.db.SampleEntity
+import com.russellwhite.moodsampler.data.location.LocationFix
+import com.russellwhite.moodsampler.data.location.PlaceMatcher
 
 class SampleRepository(private val db: AppDatabase) {
 
@@ -46,6 +48,10 @@ class SampleRepository(private val db: AppDatabase) {
             db.sampleDao().deleteByPromptId(promptId)  // cascade clears sample_activity
             db.scheduledPromptDao().cancelAnswered(promptId) == 1
         }
+
+    /** Place id past answers near [fix] point to, or null when nothing is close enough. */
+    suspend fun suggestPlace(fix: LocationFix): Long? =
+        PlaceMatcher.suggest(fix, db.sampleDao().recentGeoTags())
 
     private suspend fun insertRefs(sampleId: Long, activityIds: List<Long>) {
         val refs = activityIds.distinct().map { SampleActivityCrossRef(sampleId, it) }

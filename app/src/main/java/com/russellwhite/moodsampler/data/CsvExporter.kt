@@ -37,7 +37,8 @@ class CsvExporter(
 
         /** Column order of the export; `activities` joins several labels with "; ". */
         const val HEADER =
-            "scheduled_at_iso,answered_at_iso,status,skip_reason,latency_s,valence,arousal,pain,activities,location,social,note"
+            "scheduled_at_iso,answered_at_iso,status,skip_reason,latency_s,valence,arousal,pain,activities,location,social,note," +
+                "latitude,longitude,accuracy_m"
 
         /**
          * Pure CSV formatting (unit-tested). Missed prompts are included with
@@ -65,6 +66,9 @@ class CsvExporter(
                         s?.locationId?.let { labels[it] } ?: "",
                         s?.socialId?.let { labels[it] } ?: "",
                         s?.note ?: "",
+                        s?.latitude?.toString() ?: "",
+                        s?.longitude?.toString() ?: "",
+                        s?.accuracyM?.toString() ?: "",
                     ).joinToString(",") { quote(it) }
                 )
                 sb.append("\r\n")

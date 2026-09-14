@@ -9,6 +9,9 @@
     <!-- API 33+: auto-granted; random sampling prompts are the app's core alarm function. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Optional: one foreground fix per answered prompt, used to pre-select the place. No background tracking. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
         android:name=".MoodSamplerApp"

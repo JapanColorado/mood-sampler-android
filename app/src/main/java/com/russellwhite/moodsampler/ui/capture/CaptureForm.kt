@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +22,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.SkipReason
 import com.russellwhite.moodsampler.data.db.CategoryEntity
+import com.russellwhite.moodsampler.data.db.byActivityGroup
 import kotlin.math.roundToInt
 
 /** Everything the user enters on the capture form; also the seed for the edit screen. */
@@ -59,6 +63,11 @@ internal fun CaptureForm(
     activities: List<CategoryEntity>,
     locations: List<CategoryEntity>,
     socials: List<CategoryEntity>,
+    /** Sample counts per category id; orders the short place list by "most used". */
+    usage: Map<Long, Int>,
+    locationStatus: LocationStatus,
+    /** Place matched from the fix; preselected until the user touches the place row. */
+    suggestedLocationId: Long?,
     saveLabel: String,
     onSave: (CaptureFormValues) -> Unit,
     onSkip: ((reason: String) -> Unit)?,
@@ -73,6 +82,12 @@ internal fun CaptureForm(
     var socialId by rememberSaveable { mutableStateOf(initial.socialId) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
     var showSkip by rememberSaveable { mutableStateOf(false) }
+    var placeTouched by rememberSaveable { mutableStateOf(false) }
+
+    // The fix may land after the form is on screen; only fill an untouched, empty place.
+    LaunchedEffect(suggestedLocationId) {
+        if (suggestedLocationId != null && !placeTouched && locationId == null) locationId = suggestedLocationId
+    }
 
     Column(
         modifier
@@ -99,10 +114,17 @@ internal fun CaptureForm(
         )
         PainSlider(value = pain, onChange = { pain = it })
 
-        MultiChipSection("What are you doing? (pick any)", activities, activityIds) { id ->
+        GroupedActivitySection("What are you doing? (pick any)", activities, activityIds) { id ->
             if (!activityIds.remove(id)) activityIds.add(id)
         }
-        ChipSection("Where are you?", locations, locationId) {
+        PlaceSection(
+            locations = locations,
+            usage = usage,
+            selectedId = locationId,
+            suggestedId = suggestedLocationId,
+            status = locationStatus,
+        ) {
+            placeTouched = true
             locationId = if (locationId == it) null else it
         }
         ChipSection("Who are you with?", socials, socialId) {
@@ -254,23 +276,95 @@ internal fun ChipSection(
     }
 }
 
+/**
+ * Place picker that needs zero taps most of the time: shows the suggested place,
+ * the most-used places and the current selection; the full list is one tap away.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MultiChipSection(
+private fun PlaceSection(
+    locations: List<CategoryEntity>,
+    usage: Map<Long, Int>,
+    selectedId: Long?,
+    suggestedId: Long?,
+    status: LocationStatus,
+    onSelect: (Long) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val shortlist = remember(locations, usage, suggestedId, selectedId) {
+        val pinned = listOfNotNull(suggestedId, selectedId)
+        val top = locations.sortedByDescending { usage[it.id] ?: 0 }.take(SHORTLIST_SIZE).map { it.id }
+        val keep = (pinned + top).toSet()
+        locations.filter { it.id in keep }
+    }
+    val hasMore = shortlist.size < locations.size
+    val showAll = expanded || !hasMore
+    Column {
+        Text("Where are you?", style = MaterialTheme.typography.titleMedium)
+        LocationCaption(status, suggestedId?.let { id -> locations.firstOrNull { it.id == id }?.label })
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            (if (showAll) locations else shortlist).forEach { option ->
+                FilterChip(
+                    selected = option.id == selectedId,
+                    onClick = { onSelect(option.id) },
+                    label = { Text(option.label) },
+                )
+            }
+            if (hasMore) {
+                AssistChip(
+                    onClick = { expanded = !expanded },
+                    label = { Text(if (expanded) "Fewer" else "More…") },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationCaption(status: LocationStatus, suggestedLabel: String?) {
+    val text = when (status) {
+        LocationStatus.Off -> return
+        LocationStatus.Acquiring -> "Finding location…"
+        LocationStatus.Unavailable -> "Location unavailable"
+        is LocationStatus.Got -> buildString {
+            append("📍 Location captured")
+            status.accuracyM?.let { append(" (±${it.roundToInt()} m)") }
+            if (suggestedLabel != null) append(" · suggested: $suggestedLabel")
+        }
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+private const val SHORTLIST_SIZE = 5
+
+/** Section header for one [com.russellwhite.moodsampler.data.db.ActivityGroup] of chips. */
+@Composable
+internal fun GroupHeader(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** Multi-select activities under one header per activity group; empty groups are omitted. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GroupedActivitySection(
     title: String,
-    options: List<CategoryEntity>,
+    activities: List<CategoryEntity>,
     selectedIds: List<Long>,
     onToggle: (Long) -> Unit,
 ) {
-    Column {
+    val groups = remember(activities) { activities.byActivityGroup() }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { option ->
-                FilterChip(
-                    selected = option.id in selectedIds,
-                    onClick = { onToggle(option.id) },
-                    label = { Text(option.label) },
-                )
+        groups.forEach { (group, options) ->
+            GroupHeader(group.label)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { option ->
+                    FilterChip(
+                        selected = option.id in selectedIds,
+                        onClick = { onToggle(option.id) },
+                        label = { Text(option.label) },
+                    )
+                }
             }
         }
     }

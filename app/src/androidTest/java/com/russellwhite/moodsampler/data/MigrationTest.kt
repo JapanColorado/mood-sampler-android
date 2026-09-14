@@ -8,6 +8,7 @@ import com.google.common.truth.Truth.assertThat
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.MIGRATION_1_2
+import com.russellwhite.moodsampler.data.db.MIGRATION_2_3
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,6 +74,45 @@ class MigrationTest {
             c.moveToFirst()
             // 6 v1 + "gym" (user) + 9 new (Gym skipped)
             assertThat(c.getInt(0)).isEqualTo(6 + 1 + DefaultCategories.V2_ADDED_LOCATIONS.size - 1)
+        }
+    }
+
+    @Test
+    fun migrate2To3_assignsActivityGroupsAndKeepsSamples() {
+        helper.createDatabase(DB, 2).apply {
+            insertCategory("ACTIVITY", "Work", 1)
+            insertCategory("ACTIVITY", "watching tv / video", 2)  // case-insensitive default match
+            insertCategory("ACTIVITY", "Knitting", 3)             // user-added → OTHER
+            insertCategory("ACTIVITY", "Other", 4)
+            insertCategory("LOCATION", "Home", 1)
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status, notifiedAtEpochMs, answeredAtEpochMs)
+                   VALUES (1, 1000, '2026-08-15', 0, 'ANSWERED', 1000, 1100)"""
+            )
+            execSQL(
+                """INSERT INTO sample (id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs)
+                   VALUES (1, 1, 0.5, -0.2, 3, 5, NULL, 'hi', 1100)"""
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 3, true, MIGRATION_1_2, MIGRATION_2_3)
+
+        fun groupOf(label: String): String? = db.query(
+            "SELECT groupKey FROM category WHERE label = ?", arrayOf(label),
+        ).use { c -> c.moveToFirst(); if (c.isNull(0)) null else c.getString(0) }
+        assertThat(groupOf("Work")).isEqualTo("WORK")
+        assertThat(groupOf("watching tv / video")).isEqualTo("LEISURE")
+        assertThat(groupOf("Knitting")).isEqualTo("OTHER")
+        assertThat(groupOf("Other")).isEqualTo("OTHER")
+        assertThat(groupOf("Home")).isNull()
+
+        db.query("SELECT pain, locationId, note, latitude, longitude, accuracyM, fixAtEpochMs FROM sample WHERE id = 1").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(3)
+            assertThat(c.getLong(1)).isEqualTo(5)
+            assertThat(c.getString(2)).isEqualTo("hi")
+            (3..6).forEach { assertThat(c.isNull(it)).isTrue() }
         }
     }
 

@@ -70,6 +70,11 @@ data class SampleEntity(
     val socialId: Long?,
     val note: String?,
     val createdAtEpochMs: Long,
+    /** One foreground location fix taken while answering (schema v3); null when off, denied, or unavailable. */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracyM: Float? = null,
+    val fixAtEpochMs: Long? = null,
 )
 
 /** Many-to-many: a sample can tag several activities. */
@@ -105,6 +110,8 @@ data class CategoryEntity(
     val sortOrder: Int,
     /** Archived categories stay referenced by old samples but disappear from pickers. */
     val isArchived: Boolean = false,
+    /** [ActivityGroup] name for ACTIVITY categories (see [activityGroup]); null for other types. */
+    @ColumnInfo(name = "groupKey") val group: String? = null,
 )
 
 /** A sample plus the ids of the activities it tagged. */

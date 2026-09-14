@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.russellwhite.moodsampler.ui.rememberLocationPermission
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.ui.settings.SamplingControls
 import kotlinx.coroutines.launch
@@ -146,6 +147,7 @@ private fun PermissionsPage() {
     var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
     var exactOn by remember { mutableStateOf(alarmManager.canScheduleExactAlarms()) }
+    val location = rememberLocationPermission()
     LifecycleResumeEffect(Unit) {
         notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
         exactOn = alarmManager.canScheduleExactAlarms()
@@ -185,6 +187,15 @@ private fun PermissionsPage() {
     ) {
         context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
     }
+    PermissionCard(
+        title = "Location (optional)",
+        granted = location.granted,
+        grantedText = "On — each answer records where you were and pre-selects your place.",
+        missingText = "Off — you'll pick your place by hand. One fix per answer, only while answering; " +
+            "no background tracking. You can change this later in Settings.",
+        actionLabel = "Allow location",
+        onRequest = location.request,
+    )
 }
 
 @Composable

@@ -3,6 +3,7 @@ package com.russellwhite.moodsampler.data.backup
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
+import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleActivityCrossRef
 import com.russellwhite.moodsampler.data.db.SampleEntity
@@ -42,6 +43,7 @@ data class SettingsDto(
     val dayStartMinutes: Int,
     val dayEndMinutes: Int,
     val expiryMinutes: Int,
+    val autoLocation: Boolean = true,
 )
 
 @Serializable
@@ -51,6 +53,8 @@ data class CategoryDto(
     val label: String,
     val sortOrder: Int,
     @SerialName("archived") val isArchived: Boolean,
+    /** Activity group name (schema v3); absent in older backups. */
+    val group: String? = null,
 )
 
 @Serializable
@@ -76,6 +80,10 @@ data class SampleDto(
     val socialId: Long? = null,
     val note: String? = null,
     val createdAtEpochMs: Long,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracyM: Float? = null,
+    val fixAtEpochMs: Long? = null,
 )
 
 @Serializable
@@ -112,10 +120,15 @@ object BackupCodec {
 
 // ---- Entity <-> DTO mapping ----
 
-fun AppSettings.toDto() = SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes)
+fun AppSettings.toDto() = SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation)
 
-fun CategoryEntity.toDto() = CategoryDto(id, type.name, label, sortOrder, isArchived)
-fun CategoryDto.toEntity() = CategoryEntity(id, CategoryType.valueOf(type), label, sortOrder, isArchived)
+fun CategoryEntity.toDto() = CategoryDto(id, type.name, label, sortOrder, isArchived, group)
+fun CategoryDto.toEntity(): CategoryEntity {
+    val t = CategoryType.valueOf(type)
+    // Pre-v3 backups carry no group: give default activities theirs, everything else OTHER.
+    val g = if (t == CategoryType.ACTIVITY) group ?: DefaultCategories.groupFor(label).name else null
+    return CategoryEntity(id, t, label, sortOrder, isArchived, g)
+}
 
 fun ScheduledPromptEntity.toDto() = PromptDto(
     id, scheduledAtEpochMs, localDate, windowIndex, status.name, notifiedAtEpochMs, answeredAtEpochMs, skipReason,
@@ -124,8 +137,14 @@ fun PromptDto.toEntity() = ScheduledPromptEntity(
     id, scheduledAtEpochMs, localDate, windowIndex, PromptStatus.valueOf(status), notifiedAtEpochMs, answeredAtEpochMs, skipReason,
 )
 
-fun SampleEntity.toDto() = SampleDto(id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs)
-fun SampleDto.toEntity() = SampleEntity(id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs)
+fun SampleEntity.toDto() = SampleDto(
+    id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
+    latitude, longitude, accuracyM, fixAtEpochMs,
+)
+fun SampleDto.toEntity() = SampleEntity(
+    id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
+    latitude, longitude, accuracyM, fixAtEpochMs,
+)
 
 fun SampleActivityCrossRef.toDto() = SampleActivityDto(sampleId, categoryId)
 fun SampleActivityDto.toEntity() = SampleActivityCrossRef(sampleId, categoryId)

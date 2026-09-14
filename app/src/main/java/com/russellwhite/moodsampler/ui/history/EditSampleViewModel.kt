@@ -2,6 +2,7 @@ package com.russellwhite.moodsampler.ui.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
@@ -30,6 +31,7 @@ class EditSampleViewModel(
     private val promptId: Long,
     private val db: AppDatabase,
     private val repository: SampleRepository,
+    categoryRepository: CategoryRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<EditUiState>(EditUiState.Loading)
@@ -40,6 +42,8 @@ class EditSampleViewModel(
     val activities = pickerOptions(CategoryType.ACTIVITY) { loaded?.activityIds.orEmpty() }
     val locations = pickerOptions(CategoryType.LOCATION) { listOfNotNull(loaded?.sample?.locationId) }
     val socials = pickerOptions(CategoryType.SOCIAL) { listOfNotNull(loaded?.sample?.socialId) }
+    val usage = categoryRepository.usage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     init {
         viewModelScope.launch {
@@ -97,7 +101,7 @@ class EditSampleViewModel(
 
     companion object {
         fun factory(promptId: Long) = graphViewModelFactory { graph ->
-            EditSampleViewModel(promptId, graph.database, graph.sampleRepository)
+            EditSampleViewModel(promptId, graph.database, graph.sampleRepository, graph.categoryRepository)
         }
     }
 }

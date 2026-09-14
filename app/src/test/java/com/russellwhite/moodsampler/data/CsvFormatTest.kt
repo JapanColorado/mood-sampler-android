@@ -20,6 +20,9 @@ class CsvFormatTest {
         activityIds: List<Long> = listOf(10L),
         pain: Int? = 4,
         skipReason: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        accuracyM: Float? = null,
     ) = PromptWithSample(
         prompt = ScheduledPromptEntity(
             id = 1, scheduledAtEpochMs = 1_700_000_000_000, localDate = "2023-11-14",
@@ -32,6 +35,7 @@ class CsvFormatTest {
                 id = 1, promptId = 1, valence = 0.5f, arousal = -0.25f, pain = pain,
                 locationId = null, socialId = null,
                 note = note, createdAtEpochMs = 1_700_000_120_000,
+                latitude = latitude, longitude = longitude, accuracyM = accuracyM,
             ),
             activityIds = activityIds,
         ) else null,
@@ -44,15 +48,28 @@ class CsvFormatTest {
         val csv = CsvExporter.toCsv(listOf(row(note = null)), mapOf(10L to "Work"), zone)
         val lines = csv.trim().split("\r\n")
         assertThat(lines).hasSize(2)
-        assertThat(lines[0].split(",")).hasSize(12)
+        assertThat(lines[0].split(",")).hasSize(15)
         assertThat(lines[0]).isEqualTo(CsvExporter.HEADER)
         val cols = columns(csv)
-        assertThat(cols).hasSize(12)
+        assertThat(cols).hasSize(15)
         assertThat(cols[2]).isEqualTo("ANSWERED")
         assertThat(cols[3]).isEmpty()          // skip_reason
         assertThat(cols[4]).isEqualTo("120")   // latency seconds
         assertThat(cols[7]).isEqualTo("4")     // pain
         assertThat(cols[8]).isEqualTo("Work")
+        assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix
+    }
+
+    @Test
+    fun locationFixIsExportedInTrailingColumns() {
+        val csv = CsvExporter.toCsv(
+            listOf(row(note = null, latitude = 40.0125, longitude = -105.25, accuracyM = 12.5f)),
+            mapOf(10L to "Work"), zone,
+        )
+        val cols = columns(csv)
+        assertThat(cols[12]).isEqualTo("40.0125")
+        assertThat(cols[13]).isEqualTo("-105.25")
+        assertThat(cols[14]).isEqualTo("12.5")
     }
 
     @Test

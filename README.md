@@ -3,8 +3,10 @@
 Android app for mood/time tracking via **random experience sampling** (ESM).
 The phone prompts you at random moments during waking hours; each prompt is a
 ~15-second capture (mood valence + energy sliders, a 0–10 physical-pain rating,
-what/where/with-whom quick-picks — several activities at once — and an optional
-note). Over weeks this builds a statistically representative picture of your
+what/where/with-whom quick-picks — several activities at once, grouped under
+headers for fast scanning — and an optional note). Optionally, each answer
+records one location fix and pre-selects your place from where you answered
+before. Over weeks this builds a statistically representative picture of your
 mood and time use — unlike diaries, which oversample memorable moments.
 
 - Kotlin + Jetpack Compose (Material 3), single module, manual DI
@@ -31,8 +33,23 @@ mood and time use — unlike diaries, which oversample memorable moments.
   activity/place/company breakdowns
 - History tab: every prompt by day, note/tag search, edit or delete an answer
   (deleting marks the prompt CANCELLED — excluded from response rate, not missed)
-- Editable activity/place/company lists: rename, reorder, archive and restore,
-  with per-item usage counts; 28 default activities and 16 default places
+- Optional automatic location: with the location permission granted and the
+  Settings switch on, the capture screen takes **one foreground fix** while it
+  is open (platform `LocationManager`, no Play Services, no background
+  tracking) and stores lat/lon/accuracy on the sample. Past answers within
+  ~150 m (wider when the fix is imprecise) vote for a place, and the winner is
+  pre-selected — so at familiar spots the place needs zero taps. Skip/snooze
+  from the notification record nothing; editing an old answer keeps its fix
+- Simpler place picking: the row shows only the suggested place, the most-used
+  places and the current selection; **More…** reveals the full list. With no
+  fix nothing is pre-selected (a stale guess would bias the data)
+- Activities are grouped (Work & study, Chores & errands, Social, Leisure &
+  media, Health & body, Getting around, Rest, Other) both on the capture screen
+  and in Settings; each activity's group is editable, user-added ones start in
+  Other
+- Editable activity/place/company lists: rename, regroup, reorder, archive and
+  restore, with per-item usage counts; 28 default activities and 16 default
+  places
 - CSV export via the share sheet; full JSON backup and restore; "Delete all
   data" (answers and prompts only — categories and settings stay) behind a
   confirmation that states the counts
@@ -82,7 +99,7 @@ collides with a release install.
 7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts,
    including "Pain over time" and "Pleasantness by pain level"; toggle the
    breakdown between Pleasantness / Energy / Pain (the axis rescales to 0–10).
-   Settings → Export CSV → share to yourself and eyeball the 12 columns.
+   Settings → Export CSV → share to yourself and eyeball the 15 columns.
 8. Settings → change prompts/day → `pixi run alarms` shows a re-armed schedule.
 9. Fire a test prompt → the notification offers **Skip** and **Remind me in
    5 min**; snooze → `pixi run alarms` shows the re-show alarm next to the
@@ -102,26 +119,44 @@ collides with a release install.
 14. Install over a v1 database (real data): Settings lists the new
     activities/places with "Other" last, old samples keep their activity, and
     onboarding is skipped.
+15. Install over a v2 database: Settings → Activities shows group headers with
+    the defaults sorted into them and any custom activity under "Other"; old
+    samples are intact. Tap an activity → change its group → the capture
+    screen regroups it.
+16. Settings → "Record location with each answer" on → **Allow location** →
+    fire a test prompt → the "Where are you?" caption reads "Finding
+    location…" then "📍 Location captured (±N m)"; pick "Home", Save. Fire
+    another prompt at the same spot → "Home" is pre-selected and the caption
+    says "suggested: Home"; **More…** shows the full place list. CSV export
+    has lat/lon/accuracy in the last three columns.
+17. Switch the setting off (or deny the permission) → the next prompt shows no
+    caption, nothing is pre-selected, saving works, CSV lat/lon are empty.
 
 ## Data
 
-Room DB `moodsampler.db`, schema v2 (`app/schemas/` holds the exported JSON
+Room DB `moodsampler.db`, schema v3 (`app/schemas/` holds the exported JSON
 for every version; migrations are explicit — there is no destructive fallback):
 
 - `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
   ANSWERED/MISSED, or CANCELLED (settings change, or the user deleted the
   answer). `skipReason` is set when a MISSED prompt was declined on purpose.
 - `sample` — the answers: `valence` and `arousal` in −1..1, `pain` 0–10
-  (null for samples recorded before v2), place and company ids, note.
+  (null for samples recorded before v2), place and company ids, note, and
+  (v3) `latitude`/`longitude`/`accuracyM`/`fixAtEpochMs` — all null when
+  location was off, denied or unavailable.
 - `sample_activity` — many-to-many sample ↔ activity (a sample can tag several).
 - `category` — editable activity/place/company lists; archived, never deleted,
-  so history keeps its labels. The v1→v2 migration back-fills the new default
-  labels for existing installs, skipping any the user already has.
+  so history keeps its labels. `groupKey` (v3) is the `ActivityGroup` of an
+  activity. The v1→v2 migration back-fills the new default labels for existing
+  installs, skipping any the user already has; v2→v3 assigns groups to the
+  default activity labels and puts everything else in `OTHER`.
 
 CSV columns: `scheduled_at_iso, answered_at_iso, status, skip_reason, latency_s,
-valence, arousal, pain, activities, location, social, note` — missed prompts
-appear as rows with empty measures; several activities are joined with `; `.
+valence, arousal, pain, activities, location, social, note, latitude,
+longitude, accuracy_m` — missed prompts appear as rows with empty measures;
+several activities are joined with `; `.
 
 JSON backup (`Settings → Back up to file…`) contains every table plus the
-sampling settings with ids preserved; restore replaces all local data and
-redraws the schedule.
+sampling settings (including the auto-location switch) with ids preserved;
+restore replaces all local data and redraws the schedule. Pre-v3 backups
+restore fine: default activities get their groups, coordinates stay empty.
