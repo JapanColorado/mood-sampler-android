@@ -93,7 +93,9 @@ fun AppNav(navController: NavHostController, startDestination: String = Routes.H
                     }
                 })
             }
-            composable(Routes.HOME) { HomeScreen() }
+            composable(Routes.HOME) {
+                HomeScreen(onAnswerPrompt = { navController.navigate(Routes.capture(it)) })
+            }
             composable(Routes.DASHBOARD) { DashboardScreen() }
             composable(Routes.HISTORY) {
                 HistoryScreen(onEdit = { navController.navigate(Routes.edit(it)) })

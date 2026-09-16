@@ -74,6 +74,10 @@ interface ScheduledPromptDao {
     @Query("SELECT * FROM scheduled_prompt WHERE status = 'NOTIFIED'")
     suspend fun allNotified(): List<ScheduledPromptEntity>
 
+    /** The most recently notified prompt still awaiting an answer, if any. */
+    @Query("SELECT * FROM scheduled_prompt WHERE status = 'NOTIFIED' ORDER BY notifiedAtEpochMs DESC LIMIT 1")
+    fun latestNotifiedFlow(): Flow<ScheduledPromptEntity?>
+
     @Query("SELECT * FROM scheduled_prompt WHERE localDate = :localDate ORDER BY scheduledAtEpochMs")
     fun promptsForDateFlow(localDate: String): Flow<List<ScheduledPromptEntity>>
 

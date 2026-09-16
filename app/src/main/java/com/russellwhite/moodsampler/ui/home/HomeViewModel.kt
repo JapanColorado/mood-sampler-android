@@ -27,6 +27,8 @@ data class HomeUiState(
     val settings: AppSettings = AppSettings(),
     /** True while the clock is past midnight but still inside yesterday's sampling span. */
     val inLateNightTail: Boolean = false,
+    /** A notified prompt still inside its expiry window; lets a dismissed notification be answered. */
+    val openPromptId: Long? = null,
 ) {
     val weekResponseRate: Int?
         get() = (weekAnswered + weekMissed).takeIf { it > 0 }
@@ -82,7 +84,12 @@ class HomeViewModel(
                 dao.promptsForDateFlow(samplingDay.toString()),
                 dao.countByStatusSinceFlow(PromptStatus.ANSWERED, clock.millis() - WEEK_MS),
                 dao.countByStatusSinceFlow(PromptStatus.MISSED, clock.millis() - WEEK_MS),
-            ) { today, weekAnswered, weekMissed ->
+                dao.latestNotifiedFlow(),
+            ) { today, weekAnswered, weekMissed, notified ->
+                val expiryMs = settings.expiryMinutes * 60_000L
+                val open = notified?.takeIf {
+                    clock.millis() - (it.notifiedAtEpochMs ?: it.scheduledAtEpochMs) < expiryMs
+                }
                 HomeUiState(
                     answeredToday = today.count { it.status == PromptStatus.ANSWERED },
                     missedToday = today.count { it.status == PromptStatus.MISSED },
@@ -91,6 +98,7 @@ class HomeViewModel(
                     weekMissed = weekMissed,
                     settings = settings,
                     inLateNightTail = samplingDay != now.toLocalDate(),
+                    openPromptId = open?.id,
                 )
             }
         }
