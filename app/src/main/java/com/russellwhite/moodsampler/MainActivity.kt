@@ -26,7 +26,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingPromptId.value = intent?.promptIdOrNull()
+        // Only a fresh launch consumes the notification's prompt id. On recreation
+        // (rotation, dark-mode switch, restore after process death) Navigation
+        // restores the back stack itself; re-reading the stale extra here would push
+        // a second Capture screen for a prompt that was already answered, and its
+        // Close would pop the real one off the stack.
+        if (savedInstanceState == null) pendingPromptId.value = intent?.promptIdOrNull()
         setContent {
             MoodSamplerTheme {
                 // NavHost can't change its start destination after first composition,
@@ -61,11 +66,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         intent.promptIdOrNull()?.let { pendingPromptId.value = it }
     }
 
-    private fun Intent.promptIdOrNull(): Long? =
-        getLongExtra(EXTRA_PROMPT_ID, -1L).takeIf { it > 0 }
+    private fun Intent.promptIdOrNull(): Long? {
+        // Re-opening a finished task from Recents re-delivers the original
+        // notification intent; that is not a new prompt tap.
+        if (flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+        return getLongExtra(EXTRA_PROMPT_ID, -1L).takeIf { it > 0 }
+    }
 
     companion object {
         const val EXTRA_PROMPT_ID = "extra_prompt_id"
