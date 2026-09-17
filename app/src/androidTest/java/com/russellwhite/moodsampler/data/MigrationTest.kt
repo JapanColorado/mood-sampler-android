@@ -9,6 +9,7 @@ import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.MIGRATION_1_2
 import com.russellwhite.moodsampler.data.db.MIGRATION_2_3
+import com.russellwhite.moodsampler.data.db.MIGRATION_3_4
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -113,6 +114,30 @@ class MigrationTest {
             assertThat(c.getLong(1)).isEqualTo(5)
             assertThat(c.getString(2)).isEqualTo("hi")
             (3..6).forEach { assertThat(c.isNull(it)).isTrue() }
+        }
+    }
+
+    @Test
+    fun migrate3To4_addsNullPhotoPathAndKeepsSamples() {
+        helper.createDatabase(DB, 3).apply {
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status, notifiedAtEpochMs, answeredAtEpochMs)
+                   VALUES (1, 1000, '2026-08-15', 0, 'ANSWERED', 1000, 1100)"""
+            )
+            execSQL(
+                """INSERT INTO sample (id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs, latitude, longitude, accuracyM, fixAtEpochMs)
+                   VALUES (1, 1, 0.5, -0.2, 3, NULL, NULL, 'hi', 1100, 40.0, -105.0, 5.0, 1100)"""
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 4, true, MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
+        db.query("SELECT note, latitude, photoPath FROM sample WHERE id = 1").use { c ->
+            c.moveToFirst()
+            assertThat(c.getString(0)).isEqualTo("hi")
+            assertThat(c.getDouble(1)).isEqualTo(40.0)
+            assertThat(c.isNull(2)).isTrue()
         }
     }
 

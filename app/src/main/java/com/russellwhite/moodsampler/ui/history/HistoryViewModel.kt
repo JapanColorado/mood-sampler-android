@@ -31,6 +31,7 @@ data class HistoryRow(
     val location: String?,
     val social: String?,
     val note: String?,
+    val photoPath: String?,
 ) {
     val tags: List<String> get() = activities + listOfNotNull(location, social)
 }
@@ -86,6 +87,7 @@ class HistoryViewModel(
             location = s?.sample?.locationId?.let { labels[it] },
             social = s?.sample?.socialId?.let { labels[it] },
             note = s?.sample?.note,
+            photoPath = s?.sample?.photoPath,
         )
     }
 

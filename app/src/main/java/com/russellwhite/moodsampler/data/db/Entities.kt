@@ -75,6 +75,8 @@ data class SampleEntity(
     val longitude: Double? = null,
     val accuracyM: Float? = null,
     val fixAtEpochMs: Long? = null,
+    /** File name of an optional photo in [com.russellwhite.moodsampler.data.PhotoStore] (schema v4). */
+    val photoPath: String? = null,
 )
 
 /** Many-to-many: a sample can tag several activities. */

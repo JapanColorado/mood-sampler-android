@@ -23,6 +23,7 @@ class CsvFormatTest {
         latitude: Double? = null,
         longitude: Double? = null,
         accuracyM: Float? = null,
+        photoPath: String? = null,
     ) = PromptWithSample(
         prompt = ScheduledPromptEntity(
             id = 1, scheduledAtEpochMs = 1_700_000_000_000, localDate = "2023-11-14",
@@ -36,6 +37,7 @@ class CsvFormatTest {
                 locationId = null, socialId = null,
                 note = note, createdAtEpochMs = 1_700_000_120_000,
                 latitude = latitude, longitude = longitude, accuracyM = accuracyM,
+                photoPath = photoPath,
             ),
             activityIds = activityIds,
         ) else null,
@@ -48,16 +50,22 @@ class CsvFormatTest {
         val csv = CsvExporter.toCsv(listOf(row(note = null)), mapOf(10L to "Work"), zone)
         val lines = csv.trim().split("\r\n")
         assertThat(lines).hasSize(2)
-        assertThat(lines[0].split(",")).hasSize(15)
+        assertThat(lines[0].split(",")).hasSize(16)
         assertThat(lines[0]).isEqualTo(CsvExporter.HEADER)
         val cols = columns(csv)
-        assertThat(cols).hasSize(15)
+        assertThat(cols).hasSize(16)
         assertThat(cols[2]).isEqualTo("ANSWERED")
         assertThat(cols[3]).isEmpty()          // skip_reason
         assertThat(cols[4]).isEqualTo("120")   // latency seconds
         assertThat(cols[7]).isEqualTo("4")     // pain
         assertThat(cols[8]).isEqualTo("Work")
-        assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix
+        assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix, no photo
+    }
+
+    @Test
+    fun photoFileNameIsExportedInLastColumn() {
+        val csv = CsvExporter.toCsv(listOf(row(note = null, photoPath = "abc.jpg")), emptyMap(), zone)
+        assertThat(columns(csv)[15]).isEqualTo("abc.jpg")
     }
 
     @Test

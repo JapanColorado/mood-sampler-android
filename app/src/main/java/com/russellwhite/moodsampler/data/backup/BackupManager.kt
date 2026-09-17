@@ -3,6 +3,7 @@ package com.russellwhite.moodsampler.data.backup
 import android.content.Context
 import android.net.Uri
 import androidx.room.withTransaction
+import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.settings.SettingsRepository
 import com.russellwhite.moodsampler.scheduling.DeviceClock
@@ -19,6 +20,7 @@ class BackupManager(
     private val db: AppDatabase,
     private val settings: SettingsRepository,
     private val scheduler: PromptScheduler,
+    private val photos: PhotoStore,
     private val appVersionName: String,
     private val clock: Clock = DeviceClock,
 ) {
@@ -49,8 +51,8 @@ class BackupManager(
     }
 
     /**
-     * "Delete all data": every answer and every prompt, in one transaction.
-     * Categories and sampling settings are kept. The schedule is redrawn so
+     * "Delete all data": every answer and every prompt, in one transaction, plus
+     * every photo. Categories and sampling settings are kept. The schedule is redrawn so
      * sampling continues from a clean slate.
      */
     suspend fun deleteSamplesAndPrompts() {
@@ -59,6 +61,7 @@ class BackupManager(
             db.sampleDao().deleteAll()
             db.scheduledPromptDao().deleteAll()
         }
+        photos.deleteAll()
         scheduler.onDataReplaced()
     }
 
@@ -84,6 +87,7 @@ class BackupManager(
             db.sampleDao().insertAll(backup.samples.map { it.toEntity() })
             db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
         }
+        photos.retainOnly(backup.samples.mapNotNull { it.photoPath })
         settings.replaceAll(backup.settings)
         settings.setOnboardingDone()
         scheduler.onDataReplaced()

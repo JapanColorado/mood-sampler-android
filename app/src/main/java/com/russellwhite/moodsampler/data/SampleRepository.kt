@@ -7,7 +7,7 @@ import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.location.LocationFix
 import com.russellwhite.moodsampler.data.location.PlaceMatcher
 
-class SampleRepository(private val db: AppDatabase) {
+class SampleRepository(private val db: AppDatabase, private val photos: PhotoStore) {
 
     /**
      * Persist an answered prompt atomically: the sample row, its activity tags and
@@ -30,24 +30,35 @@ class SampleRepository(private val db: AppDatabase) {
             }
         }
 
-    /** Edit an existing answer in place; activity tags are replaced wholesale. */
-    suspend fun updateAnswer(sample: SampleEntity, activityIds: List<Long>) =
-        db.withTransaction {
+    /**
+     * Edit an existing answer in place; activity tags are replaced wholesale and a
+     * photo the edit dropped or replaced is deleted from disk.
+     */
+    suspend fun updateAnswer(sample: SampleEntity, activityIds: List<Long>) {
+        val previousPhoto = db.withTransaction {
+            val previous = db.sampleDao().photoPathByPromptId(sample.promptId)
             db.sampleDao().update(sample)
             db.sampleDao().deleteActivities(sample.id)
             insertRefs(sample.id, activityIds)
+            previous
         }
+        if (previousPhoto != null && previousPhoto != sample.photoPath) photos.delete(previousPhoto)
+    }
 
     /**
      * Remove an answer. The prompt becomes CANCELLED (excluded from response-rate
      * stats): it *was* answered, so counting it as missed would penalise the user
      * for curating their data.
      */
-    suspend fun deleteAnswer(promptId: Long): Boolean =
-        db.withTransaction {
+    suspend fun deleteAnswer(promptId: Long): Boolean {
+        val (photo, ok) = db.withTransaction {
+            val photo = db.sampleDao().photoPathByPromptId(promptId)
             db.sampleDao().deleteByPromptId(promptId)  // cascade clears sample_activity
-            db.scheduledPromptDao().cancelAnswered(promptId) == 1
+            photo to (db.scheduledPromptDao().cancelAnswered(promptId) == 1)
         }
+        photos.delete(photo)
+        return ok
+    }
 
     /** Place id past answers near [fix] point to, or null when nothing is close enough. */
     suspend fun suggestPlace(fix: LocationFix): Long? =

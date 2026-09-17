@@ -1,9 +1,11 @@
 package com.russellwhite.moodsampler.ui.history
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.PainScale
+import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
@@ -32,6 +34,7 @@ class EditSampleViewModel(
     private val db: AppDatabase,
     private val repository: SampleRepository,
     categoryRepository: CategoryRepository,
+    private val photoStore: PhotoStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<EditUiState>(EditUiState.Loading)
@@ -58,6 +61,7 @@ class EditSampleViewModel(
                     locationId = found.sample.locationId,
                     socialId = found.sample.socialId,
                     note = found.sample.note.orEmpty(),
+                    photoPath = found.sample.photoPath,
                 )
             )
         }
@@ -66,6 +70,7 @@ class EditSampleViewModel(
     fun save(values: CaptureFormValues) {
         val current = loaded ?: return
         viewModelScope.launch {
+            val photo = values.newPhotoUri?.let { photoStore.commit(Uri.parse(it)) } ?: values.photoPath
             repository.updateAnswer(
                 current.sample.copy(
                     valence = values.valence.coerceIn(-1f, 1f),
@@ -74,6 +79,7 @@ class EditSampleViewModel(
                     locationId = values.locationId,
                     socialId = values.socialId,
                     note = values.note.trim().ifEmpty { null },
+                    photoPath = photo,
                 ),
                 activityIds = values.activityIds,
             )
@@ -101,7 +107,7 @@ class EditSampleViewModel(
 
     companion object {
         fun factory(promptId: Long) = graphViewModelFactory { graph ->
-            EditSampleViewModel(promptId, graph.database, graph.sampleRepository, graph.categoryRepository)
+            EditSampleViewModel(promptId, graph.database, graph.sampleRepository, graph.categoryRepository, graph.photoStore)
         }
     }
 }

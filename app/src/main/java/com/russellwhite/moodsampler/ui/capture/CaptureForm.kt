@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -35,7 +36,11 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import android.net.Uri
+import com.russellwhite.moodsampler.appGraph
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.SkipReason
 import com.russellwhite.moodsampler.data.db.CategoryEntity
@@ -51,6 +56,10 @@ data class CaptureFormValues(
     val locationId: Long? = null,
     val socialId: Long? = null,
     val note: String = "",
+    /** File name of the photo already stored with this answer (edit seed / kept on update). */
+    val photoPath: String? = null,
+    /** A photo taken on this form and not yet stored: the capture's content Uri. */
+    val newPhotoUri: String? = null,
 )
 
 /**
@@ -81,6 +90,9 @@ internal fun CaptureForm(
     var locationId by rememberSaveable { mutableStateOf(initial.locationId) }
     var socialId by rememberSaveable { mutableStateOf(initial.socialId) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
+    var photoPath by rememberSaveable { mutableStateOf(initial.photoPath) }
+    var newPhotoUri by rememberSaveable { mutableStateOf(initial.newPhotoUri) }
+    val photoStore = LocalContext.current.appGraph.photoStore
     var showSkip by rememberSaveable { mutableStateOf(false) }
     var placeTouched by rememberSaveable { mutableStateOf(false) }
 
@@ -136,8 +148,22 @@ internal fun CaptureForm(
             onValueChange = { note = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Anything worth remembering? (optional)") },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             minLines = 1,
             maxLines = 4,
+        )
+
+        PhotoSection(
+            photo = newPhotoUri?.let(Uri::parse) ?: photoPath?.let(photoStore::uri),
+            onCaptured = { uri ->
+                newPhotoUri?.let { photoStore.discardCapture(Uri.parse(it)) }
+                newPhotoUri = uri.toString()
+            },
+            onRemoved = {
+                newPhotoUri?.let { photoStore.discardCapture(Uri.parse(it)) }
+                newPhotoUri = null
+                photoPath = null
+            },
         )
 
         Button(
@@ -151,6 +177,8 @@ internal fun CaptureForm(
                         locationId = locationId,
                         socialId = socialId,
                         note = note,
+                        photoPath = photoPath,
+                        newPhotoUri = newPhotoUri,
                     )
                 )
             },

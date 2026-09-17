@@ -28,9 +28,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.russellwhite.moodsampler.appGraph
+import com.russellwhite.moodsampler.ui.capture.PhotoThumbnail
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -112,42 +115,51 @@ private fun DayHeader(date: LocalDate, answered: Int, total: Int) {
 
 @Composable
 private fun AnsweredRow(row: HistoryRow, onClick: () -> Unit) {
+    val photoStore = LocalContext.current.appGraph.photoStore
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(row.time, style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(52.dp))
-                Text(
-                    "Pleasant %+.1f · Energy %+.1f".format(row.valence ?: 0f, row.arousal ?: 0f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.weight(1f))
-                row.pain?.let { pain ->
-                    Text(
-                        "Pain $pain",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (pain == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.error,
-                    )
-                }
+        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AnsweredSummary(row)
             }
-            if (row.tags.isNotEmpty()) {
-                Text(
-                    row.tags.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            row.note?.let { note ->
-                Text(
-                    note,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            row.photoPath?.let { PhotoThumbnail(photoStore.uri(it)) }
         }
+    }
+}
+
+@Composable
+private fun AnsweredSummary(row: HistoryRow) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(row.time, style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(52.dp))
+        Text(
+            "Pleasant %+.1f · Energy %+.1f".format(row.valence ?: 0f, row.arousal ?: 0f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.weight(1f))
+        row.pain?.let { pain ->
+            Text(
+                "Pain $pain",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (pain == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+    if (row.tags.isNotEmpty()) {
+        Text(
+            row.tags.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    row.note?.let { note ->
+        Text(
+            note,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

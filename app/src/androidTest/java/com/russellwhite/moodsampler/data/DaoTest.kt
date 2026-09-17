@@ -83,7 +83,7 @@ class DaoTest {
     @Test
     fun saveAnswer_isAtomicAndRefusesExpiredPrompt() = runTest {
         val dao = db.scheduledPromptDao()
-        val repo = SampleRepository(db)
+        val repo = SampleRepository(db, PhotoStore(ApplicationProvider.getApplicationContext()))
         val okId = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
         val missedId = dao.insert(prompt(2_000, PromptStatus.MISSED))
 
@@ -107,7 +107,7 @@ class DaoTest {
     @Test
     fun updateAnswer_replacesActivityTags() = runTest {
         val dao = db.scheduledPromptDao()
-        val repo = SampleRepository(db)
+        val repo = SampleRepository(db, PhotoStore(ApplicationProvider.getApplicationContext()))
         val id = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
         val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
         val b = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "B", sortOrder = 2))
@@ -126,7 +126,7 @@ class DaoTest {
     @Test
     fun deleteAnswer_cancelsPromptAndClearsTags() = runTest {
         val dao = db.scheduledPromptDao()
-        val repo = SampleRepository(db)
+        val repo = SampleRepository(db, PhotoStore(ApplicationProvider.getApplicationContext()))
         val id = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
         val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
         repo.saveAnswer(

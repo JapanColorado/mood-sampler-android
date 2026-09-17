@@ -22,14 +22,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
 
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
 
         const val NAME = "moodsampler.db"
 
         /** [name] is overridable so instrumented tests never touch the real database. */
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .addCallback(SeedCallback)
                 .build()
 

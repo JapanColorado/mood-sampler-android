@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="exports" path="exports/" />
+    <!-- Where the camera app writes a photo before the answer is saved. -->
+    <cache-path name="photo_captures" path="photo_captures/" />
 </paths>

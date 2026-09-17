@@ -84,6 +84,11 @@ data class SampleDto(
     val longitude: Double? = null,
     val accuracyM: Float? = null,
     val fixAtEpochMs: Long? = null,
+    /**
+     * Photo file name (schema v4). The backup carries only the name, not the image:
+     * a restore on the same phone keeps its photos, elsewhere the answer has none.
+     */
+    val photoPath: String? = null,
 )
 
 @Serializable
@@ -139,11 +144,11 @@ fun PromptDto.toEntity() = ScheduledPromptEntity(
 
 fun SampleEntity.toDto() = SampleDto(
     id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
-    latitude, longitude, accuracyM, fixAtEpochMs,
+    latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
 )
 fun SampleDto.toEntity() = SampleEntity(
     id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
-    latitude, longitude, accuracyM, fixAtEpochMs,
+    latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
 )
 
 fun SampleActivityCrossRef.toDto() = SampleActivityDto(sampleId, categoryId)

@@ -3,6 +3,7 @@ package com.russellwhite.moodsampler
 import android.content.Context
 import com.russellwhite.moodsampler.data.CategoryRepository
 import com.russellwhite.moodsampler.data.CsvExporter
+import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.backup.BackupManager
 import com.russellwhite.moodsampler.data.db.AppDatabase
@@ -18,7 +19,8 @@ import com.russellwhite.moodsampler.scheduling.ScheduleGenerator
 class AppGraph(context: Context) {
     val database: AppDatabase = AppDatabase.build(context)
     val settingsRepository = SettingsRepository(context)
-    val sampleRepository = SampleRepository(database)
+    val photoStore = PhotoStore(context)
+    val sampleRepository = SampleRepository(database, photoStore)
     val categoryRepository = CategoryRepository(database)
     val csvExporter = CsvExporter(context, database)
     val locationProvider = LocationProvider(context)
@@ -38,6 +40,7 @@ class AppGraph(context: Context) {
         db = database,
         settings = settingsRepository,
         scheduler = promptScheduler,
+        photos = photoStore,
         appVersionName = BuildConfig.VERSION_NAME,
     )
 }

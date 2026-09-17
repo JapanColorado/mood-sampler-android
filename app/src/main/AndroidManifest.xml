@@ -12,6 +12,8 @@
     <!-- Optional: one foreground fix per answered prompt, used to pre-select the place. No background tracking. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Optional photo per answer via the system camera app; no CAMERA permission needed. -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:name=".MoodSamplerApp"

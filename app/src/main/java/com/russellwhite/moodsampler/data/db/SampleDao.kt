@@ -38,6 +38,12 @@ interface SampleDao {
     @Query("SELECT * FROM sample ORDER BY id")
     suspend fun getAll(): List<SampleEntity>
 
+    @Query("SELECT photoPath FROM sample WHERE photoPath IS NOT NULL")
+    suspend fun allPhotoPaths(): List<String>
+
+    @Query("SELECT photoPath FROM sample WHERE promptId = :promptId")
+    suspend fun photoPathByPromptId(promptId: Long): String?
+
     @Query("SELECT * FROM sample_activity ORDER BY sampleId, categoryId")
     suspend fun getAllActivities(): List<SampleActivityCrossRef>
 

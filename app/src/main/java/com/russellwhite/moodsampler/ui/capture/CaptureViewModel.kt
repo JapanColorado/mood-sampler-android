@@ -1,9 +1,11 @@
 package com.russellwhite.moodsampler.ui.capture
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.AppGraph
 import com.russellwhite.moodsampler.data.PainScale
+import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
@@ -58,6 +60,7 @@ class CaptureViewModel(
     settings: SettingsRepository,
     categoryRepository: CategoryRepository,
     private val locationProvider: LocationProvider,
+    private val photoStore: PhotoStore,
     private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
@@ -125,6 +128,7 @@ class CaptureViewModel(
     fun save(values: CaptureFormValues) {
         if (_state.value != CaptureUiState.Answerable) return
         viewModelScope.launch {
+            val photo = values.newPhotoUri?.let { photoStore.commit(Uri.parse(it)) }
             val ok = sampleRepository.saveAnswer(
                 SampleEntity(
                     promptId = promptId,
@@ -139,6 +143,7 @@ class CaptureViewModel(
                     longitude = fix?.longitude,
                     accuracyM = fix?.accuracyM,
                     fixAtEpochMs = fix?.atEpochMs,
+                    photoPath = photo,
                 ),
                 activityIds = values.activityIds,
                 answeredAtMs = clock.millis(),
@@ -147,6 +152,7 @@ class CaptureViewModel(
                 scheduler.onPromptAnswered(promptId)
                 _state.value = CaptureUiState.Saved
             } else {
+                photoStore.delete(photo)
                 _state.value = CaptureUiState.Expired
             }
         }
@@ -174,6 +180,7 @@ class CaptureViewModel(
                 settings = graph.settingsRepository,
                 categoryRepository = graph.categoryRepository,
                 locationProvider = graph.locationProvider,
+                photoStore = graph.photoStore,
             )
         }
     }
