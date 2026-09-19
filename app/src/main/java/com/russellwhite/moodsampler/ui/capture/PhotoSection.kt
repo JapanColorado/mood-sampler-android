@@ -123,7 +123,9 @@ internal fun PhotoThumbnail(uri: Uri, size: Dp = 56.dp) {
 private fun decodeForDisplay(context: Context, uri: Uri, targetPx: Int): ImageBitmap? = runCatching {
     val open = { context.contentResolver.openInputStream(uri) }
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    open()?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    // With inJustDecodeBounds the decode returns null by design; only the sizes matter.
+    open()?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
     var sample = 1
     while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= targetPx) sample *= 2
     open()?.use {
