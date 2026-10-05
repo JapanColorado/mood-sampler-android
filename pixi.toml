@@ -10,16 +10,22 @@ gradle = ">=8.11"
 openjdk = "21.*"
 
 [tasks]
-bootstrap = "gradle wrapper --gradle-version 8.11.1 --distribution-type bin"
-build = "./gradlew assembleRelease"
-install = "./gradlew installRelease"
-build-debug = "./gradlew assembleDebug"
-install-debug = "./gradlew installDebug"
-test = "./gradlew testDebugUnitTest"
-connected-test = "./gradlew connectedDebugAndroidTest"
-lint = "./gradlew lintDebug"
-clean = "./gradlew clean"
-run = "./gradlew installRelease && adb shell am start -n com.russellwhite.moodsampler/com.russellwhite.moodsampler.MainActivity"
-run-debug = "./gradlew installDebug && adb shell am start -n com.russellwhite.moodsampler.debug/com.russellwhite.moodsampler.MainActivity"
-alarms = "adb shell dumpsys alarm | grep -B2 -A6 moodsampler"
-logs = "adb logcat -s MoodSampler:*"
+bootstrap = { cmd = "gradle wrapper --gradle-version 8.11.1 --distribution-type bin", description = "Regenerate the Gradle wrapper (only if gradle/wrapper is missing)" }
+
+# Build / install / run: release is the default, -debug variants use the .debug appId.
+build = { cmd = "./gradlew assembleRelease", description = "Assemble the release APK (signed if keystore.properties exists)" }
+build-debug = { cmd = "./gradlew assembleDebug", description = "Assemble the debug APK" }
+install = { cmd = "./gradlew installRelease", description = "Build and install the release APK on the connected adb device" }
+install-debug = { cmd = "./gradlew installDebug", description = "Build and install the debug APK on the connected adb device" }
+run = { cmd = "adb shell am start -n com.russellwhite.moodsampler/com.russellwhite.moodsampler.MainActivity", depends-on = ["install"], description = "Install the release APK and launch it" }
+run-debug = { cmd = "adb shell am start -n com.russellwhite.moodsampler.debug/com.russellwhite.moodsampler.MainActivity", depends-on = ["install-debug"], description = "Install the debug APK and launch it" }
+clean = { cmd = "./gradlew clean", description = "Delete all Gradle build outputs" }
+
+# Verification
+test = { cmd = "./gradlew testDebugUnitTest", description = "Run JVM unit tests" }
+connected-test = { cmd = "./gradlew connectedDebugAndroidTest", description = "Run instrumented tests on the connected device" }
+lint = { cmd = "./gradlew lintDebug", description = "Run Android lint on the debug variant" }
+
+# Device inspection
+alarms = { cmd = "adb shell dumpsys alarm | grep -B2 -A6 moodsampler", description = "Show armed alarms" }
+logs = { cmd = "adb logcat -s MoodSampler:*", description = "Filtered logcat" }
