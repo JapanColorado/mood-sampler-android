@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.russellwhite.moodsampler.AppGraph
+import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
@@ -127,13 +128,15 @@ class CaptureViewModel(
 
     fun save(values: CaptureFormValues) {
         if (_state.value != CaptureUiState.Answerable) return
+        val valence = values.valence ?: return
+        val arousal = values.arousal ?: return
         viewModelScope.launch {
             val photo = values.newPhotoUri?.let { photoStore.commit(Uri.parse(it)) }
             val ok = sampleRepository.saveAnswer(
                 SampleEntity(
                     promptId = promptId,
-                    valence = values.valence.coerceIn(-1f, 1f),
-                    arousal = values.arousal.coerceIn(-1f, 1f),
+                    valence = valence.coerceIn(MoodScale.MIN, MoodScale.MAX),
+                    arousal = arousal.coerceIn(MoodScale.MIN, MoodScale.MAX),
                     pain = values.pain.coerceIn(PainScale.MIN, PainScale.MAX),
                     locationId = values.locationId,
                     socialId = values.socialId,

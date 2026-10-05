@@ -68,7 +68,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
             StatTile("${data.missed}", "missed")
         }
 
-        Section("Mood over time", "Daily means; –1 to +1") {
+        Section("Mood over time", "Daily means; 0–10") {
             if (data.days.size >= 2) {
                 MoodTimeSeriesChart(data.days)
             } else {
@@ -84,7 +84,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
             }
         }
 
-        Section("Pleasantness by pain level", "How mood tracks pain, 0–10") {
+        Section("Valence by pain level", "How mood tracks pain, 0–10") {
             if (data.painByLevel.size >= 2) {
                 PainLevelChart(data.painByLevel)
             } else {

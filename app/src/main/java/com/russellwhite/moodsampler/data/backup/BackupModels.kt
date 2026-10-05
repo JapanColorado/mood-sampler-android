@@ -1,5 +1,6 @@
 package com.russellwhite.moodsampler.data.backup
 
+import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
@@ -12,6 +13,7 @@ import com.russellwhite.moodsampler.data.settings.AppSettings
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.math.roundToInt
 
 /**
  * On-disk backup format. Deliberately separate DTOs from the Room entities so
@@ -73,6 +75,10 @@ data class PromptDto(
 data class SampleDto(
     val id: Long,
     val promptId: Long,
+    /**
+     * 0..10 since schema v6; 1..10 in v5 backups; -1.0..+1.0 in v4 and earlier.
+     * Kept a JSON number either way so both read with one shape — see [toEntity].
+     */
     val valence: Float,
     val arousal: Float,
     val pain: Int? = null,
@@ -143,13 +149,21 @@ fun PromptDto.toEntity() = ScheduledPromptEntity(
 )
 
 fun SampleEntity.toDto() = SampleDto(
-    id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
+    id, promptId, valence.toFloat(), arousal.toFloat(), pain, locationId, socialId, note, createdAtEpochMs,
     latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
 )
-fun SampleDto.toEntity() = SampleEntity(
-    id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs,
-    latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
-)
+/** [schemaVersion] is the backup's: older files carry mood on earlier scales that need converting. */
+fun SampleDto.toEntity(schemaVersion: Int): SampleEntity {
+    fun mood(v: Float) = when {
+        schemaVersion < 5 -> MoodScale.fromLegacy(v)
+        schemaVersion == 5 -> MoodScale.fromV5(v.roundToInt())
+        else -> v.roundToInt().coerceIn(MoodScale.MIN, MoodScale.MAX)
+    }
+    return SampleEntity(
+        id, promptId, mood(valence), mood(arousal), pain, locationId, socialId, note, createdAtEpochMs,
+        latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
+    )
+}
 
 fun SampleActivityCrossRef.toDto() = SampleActivityDto(sampleId, categoryId)
 fun SampleActivityDto.toEntity() = SampleActivityCrossRef(sampleId, categoryId)

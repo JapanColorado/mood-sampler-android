@@ -1,6 +1,7 @@
 package com.russellwhite.moodsampler.debug
 
 import com.russellwhite.moodsampler.AppGraph
+import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.data.SkipReason
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
@@ -54,7 +55,8 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                 )
             )
             if (answered) {
-                // Mood with a gentle daily rhythm plus noise, so charts have shape.
+                // Mood with a gentle daily rhythm plus noise, so charts have shape; drawn on
+                // a -1..+1 curve and snapped onto the 0–10 scale.
                 val hourPhase = sin((minute / 60.0 - 9) / 13.0 * PI)
                 val valence = (0.15 + 0.35 * hourPhase + random.nextDouble(-0.45, 0.45))
                 val arousal = (0.3 * hourPhase + random.nextDouble(-0.5, 0.5))
@@ -64,8 +66,8 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                 val sampleId = sampleDao.insert(
                     SampleEntity(
                         promptId = promptId,
-                        valence = valence.coerceIn(-1.0, 1.0).toFloat(),
-                        arousal = arousal.coerceIn(-1.0, 1.0).toFloat(),
+                        valence = MoodScale.fromLegacy(valence.toFloat()),
+                        arousal = MoodScale.fromLegacy(arousal.toFloat()),
                         pain = pain,
                         locationId = locations.randomOrNull(random)?.id,
                         socialId = socials.randomOrNull(random)?.id,

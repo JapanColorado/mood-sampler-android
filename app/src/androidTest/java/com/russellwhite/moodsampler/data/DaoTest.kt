@@ -51,9 +51,9 @@ class DaoTest {
         val prompts = db.scheduledPromptDao()
         val samples = db.sampleDao()
         val ids = (1..3).map { prompts.insert(prompt(it * 1_000L, PromptStatus.ANSWERED)) }
-        samples.insert(SampleEntity(promptId = ids[0], valence = 0f, arousal = 0f, locationId = 7, socialId = null, note = null, createdAtEpochMs = 1, latitude = 40.0, longitude = -105.0, accuracyM = 5f, fixAtEpochMs = 1))
-        samples.insert(SampleEntity(promptId = ids[1], valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 2, latitude = 40.0, longitude = -105.0))
-        samples.insert(SampleEntity(promptId = ids[2], valence = 0f, arousal = 0f, locationId = 8, socialId = null, note = null, createdAtEpochMs = 3))
+        samples.insert(SampleEntity(promptId = ids[0], valence = 6, arousal = 6, locationId = 7, socialId = null, note = null, createdAtEpochMs = 1, latitude = 40.0, longitude = -105.0, accuracyM = 5f, fixAtEpochMs = 1))
+        samples.insert(SampleEntity(promptId = ids[1], valence = 6, arousal = 6, locationId = null, socialId = null, note = null, createdAtEpochMs = 2, latitude = 40.0, longitude = -105.0))
+        samples.insert(SampleEntity(promptId = ids[2], valence = 6, arousal = 6, locationId = 8, socialId = null, note = null, createdAtEpochMs = 3))
 
         val tags = samples.recentGeoTags()
         assertThat(tags).hasSize(1)
@@ -88,7 +88,7 @@ class DaoTest {
         val missedId = dao.insert(prompt(2_000, PromptStatus.MISSED))
 
         fun sample(promptId: Long) = SampleEntity(
-            promptId = promptId, valence = 0.5f, arousal = -0.2f, pain = 3,
+            promptId = promptId, valence = 7, arousal = 4, pain = 3,
             locationId = null, socialId = null,
             note = null, createdAtEpochMs = 0,
         )
@@ -112,7 +112,7 @@ class DaoTest {
         val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
         val b = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "B", sortOrder = 2))
         repo.saveAnswer(
-            SampleEntity(promptId = id, valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
+            SampleEntity(promptId = id, valence = 6, arousal = 6, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
             listOf(a), answeredAtMs = 1_100,
         )
         val saved = db.sampleDao().byPromptId(id)!!
@@ -130,7 +130,7 @@ class DaoTest {
         val id = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))
         val a = db.categoryDao().insert(CategoryEntity(type = CategoryType.ACTIVITY, label = "A", sortOrder = 1))
         repo.saveAnswer(
-            SampleEntity(promptId = id, valence = 0f, arousal = 0f, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
+            SampleEntity(promptId = id, valence = 6, arousal = 6, locationId = null, socialId = null, note = null, createdAtEpochMs = 0),
             listOf(a), answeredAtMs = 1_100,
         )
         assertThat(repo.deleteAnswer(id)).isTrue()
@@ -192,14 +192,14 @@ class DaoTest {
         dao.insert(prompt(3_000, PromptStatus.PENDING))
         db.sampleDao().insert(
             SampleEntity(
-                promptId = answeredId, valence = 1f, arousal = 0f,
+                promptId = answeredId, valence = 10, arousal = 6,
                 locationId = null, socialId = null,
                 note = null, createdAtEpochMs = 1_050,
             )
         )
         val rows = dao.allConcludedPrompts()
         assertThat(rows).hasSize(2)
-        assertThat(rows[0].sample?.sample?.valence).isEqualTo(1f)
+        assertThat(rows[0].sample?.sample?.valence).isEqualTo(10)
         assertThat(rows[0].sample?.activityIds).isEmpty()
         assertThat(rows[1].sample).isNull()
     }

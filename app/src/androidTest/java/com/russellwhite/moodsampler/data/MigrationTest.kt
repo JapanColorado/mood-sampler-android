@@ -10,6 +10,8 @@ import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.MIGRATION_1_2
 import com.russellwhite.moodsampler.data.db.MIGRATION_2_3
 import com.russellwhite.moodsampler.data.db.MIGRATION_3_4
+import com.russellwhite.moodsampler.data.db.MIGRATION_4_6
+import com.russellwhite.moodsampler.data.db.MIGRATION_5_6
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -138,6 +140,72 @@ class MigrationTest {
             assertThat(c.getString(0)).isEqualTo("hi")
             assertThat(c.getDouble(1)).isEqualTo(40.0)
             assertThat(c.isNull(2)).isTrue()
+        }
+    }
+
+    @Test
+    fun migrate4To6_snapsMoodToStepsAndKeepsActivityLinks() {
+        helper.createDatabase(DB, 4).apply {
+            insertCategory("ACTIVITY", "Work", 1)
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status, notifiedAtEpochMs, answeredAtEpochMs)
+                   VALUES (1, 1000, '2026-08-15', 0, 'ANSWERED', 1000, 1100),
+                          (2, 2000, '2026-08-15', 1, 'ANSWERED', 2000, 2100)"""
+            )
+            execSQL(
+                """INSERT INTO sample (id, promptId, valence, arousal, pain, locationId, socialId, note, createdAtEpochMs, latitude, longitude, accuracyM, fixAtEpochMs, photoPath)
+                   VALUES (1, 1, 0.3, -0.5, 3, NULL, NULL, 'hi', 1100, 40.0, -105.0, 5.0, 1100, 'p.jpg'),
+                          (2, 2, -1.0, 1.0, NULL, NULL, NULL, NULL, 2100, NULL, NULL, NULL, NULL, NULL)"""
+            )
+            execSQL("INSERT INTO sample_activity (sampleId, categoryId) SELECT 1, id FROM category WHERE label = 'Work'")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 6, true, MIGRATION_4_6)
+
+        db.query("SELECT valence, arousal, pain, note, latitude, photoPath FROM sample ORDER BY id").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(MoodScale.fromLegacy(0.3f))
+            assertThat(c.getInt(1)).isEqualTo(MoodScale.fromLegacy(-0.5f))
+            assertThat(c.getInt(2)).isEqualTo(3)
+            assertThat(c.getString(3)).isEqualTo("hi")
+            assertThat(c.getDouble(4)).isEqualTo(40.0)
+            assertThat(c.getString(5)).isEqualTo("p.jpg")
+            c.moveToNext()
+            assertThat(c.getInt(0)).isEqualTo(0)
+            assertThat(c.getInt(1)).isEqualTo(10)
+            assertThat(c.isNull(2)).isTrue()
+        }
+        db.query("SELECT COUNT(*) FROM sample_activity WHERE sampleId = 1").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun migrate5To6_stretchesOneToTenOntoZeroToTen() {
+        helper.createDatabase(DB, 5).apply {
+            (1..10).forEach { n ->
+                execSQL(
+                    """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status)
+                       VALUES ($n, $n, '2026-10-05', $n, 'ANSWERED')"""
+                )
+                execSQL(
+                    """INSERT INTO sample (id, promptId, valence, arousal, createdAtEpochMs)
+                       VALUES ($n, $n, $n, ${11 - n}, $n)"""
+                )
+            }
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 6, true, MIGRATION_5_6)
+
+        db.query("SELECT valence, arousal FROM sample ORDER BY id").use { c ->
+            (1..10).forEach { n ->
+                c.moveToNext()
+                assertThat(c.getInt(0)).isEqualTo(MoodScale.fromV5(n))
+                assertThat(c.getInt(1)).isEqualTo(MoodScale.fromV5(11 - n))
+            }
         }
     }
 

@@ -2,7 +2,7 @@
 
 Android app for mood/time tracking via **random experience sampling** (ESM).
 The phone prompts you at random moments during waking hours; each prompt is a
-~15-second capture (mood valence + energy sliders, a 0–10 physical-pain rating,
+~15-second capture (0–10 valence + energy taps, a 0–10 physical-pain rating,
 what/where/with-whom quick-picks — several activities at once, grouped under
 headers for fast scanning — and an optional note). Optionally, each answer
 records one location fix and pre-selects your place from where you answered
@@ -28,8 +28,8 @@ mood and time use — unlike diaries, which oversample memorable moments.
 - Follows the phone's time zone: day start/end are local times, and the
   upcoming schedule is redrawn automatically when the zone changes (travel)
 - The UI never reveals upcoming prompt times — anticipation biases sampling
-- Insights dashboard: mood and pain over time, pleasantness by pain level, and a
-  pleasantness / energy / pain toggle for the time-of-day and
+- Insights dashboard: mood and pain over time, valence by pain level, and a
+  valence / energy / pain toggle for the time-of-day and
   activity/place/company breakdowns
 - History tab: every prompt by day, note/tag search, edit or delete an answer
   (deleting marks the prompt CANCELLED — excluded from response rate, not missed)
@@ -71,11 +71,11 @@ Day-to-day (pixi tasks wrap `./gradlew`):
 
 ```sh
 pixi run build            # assembleRelease (signed if keystore.properties exists)
-pixi run test             # JVM unit tests (schedule generator, CSV format)
-pixi run install          # install release build on the connected phone
-pixi run connected-test   # instrumented Room DAO tests (device required)
+pixi run install          # build + install release on the connected phone
 pixi run run              # install release + launch
 pixi run build-debug / install-debug / run-debug   # debug variant (.debug appId)
+pixi run test             # JVM unit tests (schedule generator, CSV format)
+pixi run connected-test   # instrumented Room DAO tests (device required)
 pixi run alarms           # inspect armed alarms via dumpsys
 pixi run logs             # filtered logcat
 ```
@@ -98,8 +98,8 @@ collides with a release install.
 6. `adb shell dumpsys deviceidle force-idle` then fire a test prompt →
    still arrives (exact-and-allow-while-idle); `adb shell dumpsys deviceidle unforce`.
 7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts,
-   including "Pain over time" and "Pleasantness by pain level"; toggle the
-   breakdown between Pleasantness / Energy / Pain (the axis rescales to 0–10).
+   including "Pain over time" and "Valence by pain level"; toggle the
+   breakdown between Valence / Energy / Pain.
    Settings → Export CSV → share to yourself and eyeball the 15 columns.
 8. Settings → change prompts/day → `pixi run alarms` shows a re-armed schedule.
 9. Fire a test prompt → the notification offers **Skip** and **Remind me in
@@ -113,7 +113,7 @@ collides with a release install.
 12. Settings → tap a category chip → usage count, ▲▼ reorder, Archive →
     "Archived (1)" → Restore.
 13. Settings → **Back up to file…** → `adb shell pm clear
-    com.russellwhite.moodsampler.debug` → `pixi run run` → onboarding appears
+    com.russellwhite.moodsampler.debug` → `pixi run run-debug` → onboarding appears
     (no Home flash), grant notifications, **Start sampling** → Settings →
     **Restore from file…** → confirm → History/Insights match, editing an old
     entry works, `pixi run alarms` shows one re-armed prompt alarm.
@@ -135,13 +135,14 @@ collides with a release install.
 
 ## Data
 
-Room DB `moodsampler.db`, schema v3 (`app/schemas/` holds the exported JSON
+Room DB `moodsampler.db`, schema v6 (`app/schemas/` holds the exported JSON
 for every version; migrations are explicit — there is no destructive fallback):
 
 - `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
   ANSWERED/MISSED, or CANCELLED (settings change, or the user deleted the
   answer). `skipReason` is set when a MISSED prompt was declined on purpose.
-- `sample` — the answers: `valence` and `arousal` in −1..1, `pain` 0–10
+- `sample` — the answers: `valence` and `arousal` (energy) as integers 0–10
+  (v6; v5 used 1–10 and v4 and earlier −1..1 slider values, both converted on migration), `pain` 0–10
   (null for samples recorded before v2), place and company ids, note, and
   (v3) `latitude`/`longitude`/`accuracyM`/`fixAtEpochMs` — all null when
   location was off, denied or unavailable.

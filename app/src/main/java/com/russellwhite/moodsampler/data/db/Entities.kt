@@ -60,10 +60,10 @@ data class ScheduledPromptEntity(
 data class SampleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(index = true) val promptId: Long,
-    /** Mood valence, -1.0 (unpleasant) .. +1.0 (pleasant). */
-    val valence: Float,
-    /** Arousal/energy, -1.0 (low) .. +1.0 (high). */
-    val arousal: Float,
+    /** Valence, 0 (awful) .. 10 (great); see [com.russellwhite.moodsampler.data.MoodScale]. */
+    val valence: Int,
+    /** Energy, 0 (drained) .. 10 (wired). */
+    val arousal: Int,
     /** Physical pain, 0 (none) .. 10 (worst imaginable). Null only for samples recorded before the slider existed. */
     val pain: Int? = null,
     val locationId: Long?,

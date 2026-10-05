@@ -123,8 +123,8 @@ private fun WhyPage() {
     Text("Random moments, honest picture", style = MaterialTheme.typography.headlineMedium)
     Text(
         "Mood Sampler asks how you feel a few times a day, at random moments you " +
-            "can't predict. Each check-in takes about 15 seconds: two mood sliders, a " +
-            "pain rating, and what you're doing, where, and with whom.",
+            "can't predict. Each check-in takes about 15 seconds: two quick 0–10 mood " +
+            "taps, a pain rating, and what you're doing, where, and with whom.",
         style = MaterialTheme.typography.bodyLarge,
     )
     Text(

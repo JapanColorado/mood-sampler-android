@@ -53,7 +53,7 @@ class BackupImportTest {
             settings = SettingsDto(6, 540, 1320, 20),
             categories = listOf(CategoryDto(41, "ACTIVITY", "Work", 1, false), CategoryDto(42, "ACTIVITY", "Music", 2, false)),
             prompts = listOf(PromptDto(900, 5_000, "2026-08-15", 0, "ANSWERED", 5_000, 5_100)),
-            samples = listOf(SampleDto(77, 900, 0.5f, 0f, 2, null, null, "hi", 5_100)),
+            samples = listOf(SampleDto(77, 900, 7f, 4f, 2, null, null, "hi", 5_100)),
             sampleActivities = listOf(SampleActivityDto(77, 41), SampleActivityDto(77, 42)),
         )
 
@@ -64,7 +64,7 @@ class BackupImportTest {
             db.categoryDao().deleteAll()
             db.categoryDao().insertAll(backup.categories.map { it.toEntity() })
             db.scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
-            db.sampleDao().insertAll(backup.samples.map { it.toEntity() })
+            db.sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
             db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
         }
 

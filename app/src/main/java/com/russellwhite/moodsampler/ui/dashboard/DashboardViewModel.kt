@@ -2,6 +2,8 @@ package com.russellwhite.moodsampler.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.russellwhite.moodsampler.data.MoodScale
+import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.PromptWithSample
@@ -28,15 +30,20 @@ enum class DashboardRange(val label: String, val days: Long?) {
     ALL("All", null),
 }
 
-/** Which per-sample number the breakdown charts show. */
+/**
+ * Which per-sample number the breakdown charts show. Diverging measures are bipolar
+ * (awful ↔ great), so their bars grow either way from the scale's midpoint.
+ */
 enum class Measure(val label: String, val min: Double, val max: Double, val diverging: Boolean) {
-    PLEASANTNESS("Pleasantness", -1.0, 1.0, diverging = true),
-    ENERGY("Energy", -1.0, 1.0, diverging = true),
-    PAIN("Pain", 0.0, 10.0, diverging = false);
+    VALENCE("Valence", MoodScale.MIN.toDouble(), MoodScale.MAX.toDouble(), diverging = true),
+    ENERGY("Energy", MoodScale.MIN.toDouble(), MoodScale.MAX.toDouble(), diverging = true),
+    PAIN("Pain", PainScale.MIN.toDouble(), PainScale.MAX.toDouble(), diverging = false);
+
+    val midpoint: Double get() = (min + max) / 2
 
     /** Null when the sample has no value for this measure (pre-v2 rows have no pain). */
     fun of(sample: SampleEntity): Double? = when (this) {
-        PLEASANTNESS -> sample.valence.toDouble()
+        VALENCE -> sample.valence.toDouble()
         ENERGY -> sample.arousal.toDouble()
         PAIN -> sample.pain?.toDouble()
     }
@@ -46,11 +53,11 @@ data class DayMood(val date: LocalDate, val valence: Double, val arousal: Double
 data class DayPain(val date: LocalDate, val pain: Double, val n: Int)
 data class HourMood(val hour: Int, val value: Double, val n: Int)
 data class CategoryMood(val label: String, val value: Double, val n: Int)
-/** Mean pleasantness of the samples rated at one pain level. */
+/** Mean valence of the samples rated at one pain level. */
 data class PainLevelMood(val level: Int, val valence: Double, val n: Int)
 
 data class DashboardData(
-    val measure: Measure = Measure.PLEASANTNESS,
+    val measure: Measure = Measure.VALENCE,
     val days: List<DayMood> = emptyList(),
     val painDays: List<DayPain> = emptyList(),
     val painByLevel: List<PainLevelMood> = emptyList(),
@@ -73,7 +80,7 @@ class DashboardViewModel(
 ) : ViewModel() {
 
     val range = MutableStateFlow(DashboardRange.TWO_WEEKS)
-    val measure = MutableStateFlow(Measure.PLEASANTNESS)
+    val measure = MutableStateFlow(Measure.VALENCE)
 
     val data: StateFlow<DashboardData> = combine(range, measure) { r, m -> r to m }
         .flatMapLatest { (r, m) ->

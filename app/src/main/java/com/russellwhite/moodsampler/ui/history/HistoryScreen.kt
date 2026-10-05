@@ -131,7 +131,7 @@ private fun AnsweredSummary(row: HistoryRow) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(row.time, style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(52.dp))
         Text(
-            "Pleasant %+.1f · Energy %+.1f".format(row.valence ?: 0f, row.arousal ?: 0f),
+            "Valence ${row.valence ?: "–"} · Energy ${row.arousal ?: "–"}",
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.weight(1f))

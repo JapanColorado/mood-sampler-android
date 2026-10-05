@@ -10,19 +10,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +27,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
@@ -44,16 +42,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Optional photo for the answer. [photo] is what's currently attached (a stored
- * photo's file Uri, or a fresh capture's content Uri); the section only reports
- * changes, the form owns the state.
+ * Launcher for an optional answer photo: returns the action that opens the camera,
+ * or null on a device without one. The form owns the attached photo; this only
+ * reports a successful capture's content Uri.
  */
 @Composable
-internal fun PhotoSection(
-    photo: Uri?,
-    onCaptured: (Uri) -> Unit,
-    onRemoved: () -> Unit,
-) {
+internal fun rememberPhotoCapture(onCaptured: (Uri) -> Unit): (() -> Unit)? {
     val context = LocalContext.current
     val photoStore = context.appGraph.photoStore
     val hasCamera = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
@@ -65,7 +59,8 @@ internal fun PhotoSection(
         if (uri == null) return@rememberLauncherForActivityResult
         if (ok) onCaptured(uri) else photoStore.discardCapture(uri)
     }
-    fun takePhoto() {
+    if (!hasCamera) return null
+    return {
         val uri = photoStore.newCaptureUri()
         pending = uri.toString()
         try {
@@ -75,22 +70,31 @@ internal fun PhotoSection(
             photoStore.discardCapture(uri)
         }
     }
+}
 
-    if (!hasCamera && photo == null) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Add a photo? (optional)", style = MaterialTheme.typography.titleMedium)
-        if (photo == null) {
-            OutlinedButton(onClick = ::takePhoto) {
-                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                Text("  Take photo")
-            }
-        } else {
-            PhotoImage(photo, height = 220.dp, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (hasCamera) TextButton(onClick = ::takePhoto) { Text("Retake") }
-                TextButton(onClick = onRemoved) { Text("Remove") }
-            }
+/** The attached photo with small Retake (when there's a camera) and Remove actions overlaid. */
+@Composable
+internal fun AttachedPhoto(photo: Uri, onRetake: (() -> Unit)?, onRemove: () -> Unit) {
+    Box(Modifier.fillMaxWidth()) {
+        PhotoImage(photo, height = 180.dp, modifier = Modifier.fillMaxWidth())
+        Row(
+            Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (onRetake != null) PhotoAction("Retake", onRetake)
+            PhotoAction("Remove", onRemove)
         }
+    }
+}
+
+@Composable
+private fun PhotoAction(label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
     }
 }
 

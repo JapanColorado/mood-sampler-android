@@ -33,7 +33,7 @@ class CsvFormatTest {
         ),
         sample = if (withSample) SampleWithActivities(
             sample = SampleEntity(
-                id = 1, promptId = 1, valence = 0.5f, arousal = -0.25f, pain = pain,
+                id = 1, promptId = 1, valence = 7, arousal = 4, pain = pain,
                 locationId = null, socialId = null,
                 note = note, createdAtEpochMs = 1_700_000_120_000,
                 latitude = latitude, longitude = longitude, accuracyM = accuracyM,
@@ -57,6 +57,8 @@ class CsvFormatTest {
         assertThat(cols[2]).isEqualTo("ANSWERED")
         assertThat(cols[3]).isEmpty()          // skip_reason
         assertThat(cols[4]).isEqualTo("120")   // latency seconds
+        assertThat(cols[5]).isEqualTo("7")     // valence
+        assertThat(cols[6]).isEqualTo("4")     // arousal
         assertThat(cols[7]).isEqualTo("4")     // pain
         assertThat(cols[8]).isEqualTo("Work")
         assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix, no photo

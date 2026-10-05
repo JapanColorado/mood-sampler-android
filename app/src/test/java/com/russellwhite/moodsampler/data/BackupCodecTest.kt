@@ -23,7 +23,7 @@ class BackupCodecTest {
         settings = SettingsDto(6, 540, 1320, 20),
         categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"), CategoryDto(2, "LOCATION", "Home", 1, true)),
         prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
-        samples = listOf(SampleDto(3, 7, 0.5f, -0.25f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000)),
+        samples = listOf(SampleDto(3, 7, 7f, 4f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000)),
         sampleActivities = listOf(SampleActivityDto(3, 1)),
     )
 
@@ -53,6 +53,24 @@ class BackupCodecTest {
         assertThat(decoded.categories.single().group).isNull()
         assertThat(decoded.categories.single().toEntity().group).isEqualTo("WORK")
         assertThat(decoded.samples.single().latitude).isNull()
+        // Slider-era valence/arousal snap onto the 0–10 scale.
+        val entity = decoded.samples.single().toEntity(decoded.schemaVersion)
+        assertThat(entity.valence).isEqualTo(8)
+        assertThat(entity.arousal).isEqualTo(5)
+    }
+
+    @Test
+    fun v5SamplesStretchOntoZeroToTen() {
+        val entity = sample.samples.single().toEntity(schemaVersion = 5)
+        assertThat(entity.valence).isEqualTo(MoodScale.fromV5(7))
+        assertThat(entity.arousal).isEqualTo(MoodScale.fromV5(4))
+    }
+
+    @Test
+    fun currentSchemaSamplesKeepTheirSteps() {
+        val entity = sample.samples.single().toEntity(sample.schemaVersion)
+        assertThat(entity.valence).isEqualTo(7)
+        assertThat(entity.arousal).isEqualTo(4)
     }
 
     @Test

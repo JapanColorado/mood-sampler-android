@@ -84,7 +84,7 @@ class BackupManager(
             db.categoryDao().deleteAll()
             db.categoryDao().insertAll(backup.categories.map { it.toEntity() })
             db.scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
-            db.sampleDao().insertAll(backup.samples.map { it.toEntity() })
+            db.sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
             db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
         }
         photos.retainOnly(backup.samples.mapNotNull { it.photoPath })

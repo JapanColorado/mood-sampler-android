@@ -117,6 +117,75 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * v4 → v6 directly: `sample.valence/arousal` go from REAL -1.0..+1.0 (continuous
+ * slider) to INTEGER 0..10 (tap scale), each old value snapped to its nearest step
+ * exactly as [com.russellwhite.moodsampler.data.MoodScale.fromLegacy] does. Skipping
+ * v5's 1..10 scale avoids rounding twice (there is no 4 → 5 step).
+ *
+ * `sample` is rebuilt to change the declared types (CREATE mirrors 6.json). Dropping
+ * it cascades into `sample_activity`, so those links are parked and restored.
+ */
+val MIGRATION_4_6 = object : Migration(4, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TEMP TABLE `_links` AS SELECT `sampleId`, `categoryId` FROM `sample_activity`")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sample_new` (
+               `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+               `promptId` INTEGER NOT NULL,
+               `valence` INTEGER NOT NULL,
+               `arousal` INTEGER NOT NULL,
+               `pain` INTEGER,
+               `locationId` INTEGER,
+               `socialId` INTEGER,
+               `note` TEXT,
+               `createdAtEpochMs` INTEGER NOT NULL,
+               `latitude` REAL,
+               `longitude` REAL,
+               `accuracyM` REAL,
+               `fixAtEpochMs` INTEGER,
+               `photoPath` TEXT,
+               FOREIGN KEY(`promptId`) REFERENCES `scheduled_prompt`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+        )
+        db.execSQL(
+            """INSERT INTO `sample_new`
+               (`id`, `promptId`, `valence`, `arousal`, `pain`, `locationId`, `socialId`, `note`, `createdAtEpochMs`,
+                `latitude`, `longitude`, `accuracyM`, `fixAtEpochMs`, `photoPath`)
+               SELECT `id`, `promptId`, ${legacyToStep("valence")}, ${legacyToStep("arousal")}, `pain`, `locationId`,
+                `socialId`, `note`, `createdAtEpochMs`, `latitude`, `longitude`, `accuracyM`, `fixAtEpochMs`, `photoPath`
+               FROM `sample`"""
+        )
+        db.execSQL("DROP TABLE `sample`")
+        db.execSQL("ALTER TABLE `sample_new` RENAME TO `sample`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_sample_promptId` ON `sample` (`promptId`)")
+
+        db.execSQL(
+            """INSERT OR IGNORE INTO `sample_activity` (`sampleId`, `categoryId`)
+               SELECT `sampleId`, `categoryId` FROM `_links`"""
+        )
+        db.execSQL("DROP TABLE `_links`")
+    }
+
+    /** SQL twin of MoodScale.fromLegacy: clamp to -1..1, scale to 0..10, round. */
+    private fun legacyToStep(column: String) =
+        "CAST(ROUND((MIN(1.0, MAX(-1.0, `$column`)) + 1.0) * 5.0) AS INTEGER)"
+}
+
+/**
+ * v5 → v6: valence/arousal widen from 1..10 to 0..10 (matching pain), stretched
+ * evenly as [com.russellwhite.moodsampler.data.MoodScale.fromV5] does. Same column
+ * types, so values are rewritten in place.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """UPDATE `sample` SET
+               `valence` = CAST(ROUND((MIN(10, MAX(1, `valence`)) - 1) * 10.0 / 9.0) AS INTEGER),
+               `arousal` = CAST(ROUND((MIN(10, MAX(1, `arousal`)) - 1) * 10.0 / 9.0) AS INTEGER)"""
+        )
+    }
+}
+
 private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
     db.execSQL(
         """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)

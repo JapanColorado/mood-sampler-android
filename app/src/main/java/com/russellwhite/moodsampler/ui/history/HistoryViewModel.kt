@@ -24,8 +24,8 @@ data class HistoryRow(
     val answered: Boolean,
     /** "Missed" / "Skipped · Busy" for unanswered rows. */
     val missedLabel: String,
-    val valence: Float?,
-    val arousal: Float?,
+    val valence: Int?,
+    val arousal: Int?,
     val pain: Int?,
     val activities: List<String>,
     val location: String?,

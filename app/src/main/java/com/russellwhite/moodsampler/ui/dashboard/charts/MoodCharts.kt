@@ -40,6 +40,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
+import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.ui.dashboard.CategoryMood
 import com.russellwhite.moodsampler.ui.dashboard.DayMood
 import com.russellwhite.moodsampler.ui.dashboard.DayPain
@@ -71,11 +72,14 @@ object MoodChartColors {
 
     @Composable
     fun of(measure: Measure): Color = when (measure) {
-        Measure.PLEASANTNESS -> valence()
+        Measure.VALENCE -> valence()
         Measure.ENERGY -> arousal()
         Measure.PAIN -> pain()
     }
 }
+
+private val MOOD_MIN = MoodScale.MIN.toDouble()
+private val MOOD_MAX = MoodScale.MAX.toDouble()
 
 private val dateFmt = DateTimeFormatter.ofPattern("MMM d")
 
@@ -110,7 +114,7 @@ fun MoodTimeSeriesChart(days: List<DayMood>, modifier: Modifier = Modifier) {
                             fill = LineCartesianLayer.LineFill.single(fill(arousalColor)),
                         ),
                     ),
-                    rangeProvider = remember { CartesianLayerRangeProvider.fixed(minY = -1.0, maxY = 1.0) },
+                    rangeProvider = remember { CartesianLayerRangeProvider.fixed(minY = MOOD_MIN, maxY = MOOD_MAX) },
                 ),
                 startAxis = VerticalAxis.rememberStart(),
                 bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = bottomFormatter),
@@ -119,7 +123,7 @@ fun MoodTimeSeriesChart(days: List<DayMood>, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth().height(220.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            LegendItem(valenceColor, "Pleasantness")
+            LegendItem(valenceColor, "Valence")
             LegendItem(arousalColor, "Energy")
         }
     }
@@ -185,7 +189,7 @@ fun HourOfDayChart(hours: List<HourMood>, measure: Measure, modifier: Modifier =
     )
 }
 
-/** Mean pleasantness at each reported pain level (0–10) — the mood-vs-pain view. */
+/** Mean valence at each reported pain level (0–10) — the mood-vs-pain view. */
 @Composable
 fun PainLevelChart(levels: List<PainLevelMood>, modifier: Modifier = Modifier) {
     val modelProducer = remember { CartesianChartModelProducer() }
@@ -204,7 +208,7 @@ fun PainLevelChart(levels: List<PainLevelMood>, modifier: Modifier = Modifier) {
                 columnProvider = ColumnCartesianLayer.ColumnProvider.series(
                     rememberLineComponent(fill = fill(valenceColor), thickness = 14.dp),
                 ),
-                rangeProvider = remember { CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = 10.0, minY = -1.0, maxY = 1.0) },
+                rangeProvider = remember { CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = 10.0, minY = MOOD_MIN, maxY = MOOD_MAX) },
             ),
             startAxis = VerticalAxis.rememberStart(),
             bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = bottomFormatter),
@@ -243,14 +247,14 @@ fun CategoryBars(rows: List<CategoryMood>, measure: Measure, modifier: Modifier 
                     val value = row.value.toFloat().coerceIn(measure.min.toFloat(), measure.max.toFloat())
                     if (measure.diverging) {
                         val mid = size.width / 2f
-                        // 1px midline marks zero so direction reads instantly.
+                        // 1px midline marks the scale's neutral middle so direction reads instantly.
                         drawLine(
                             color = midline,
                             start = Offset(mid, 0f),
                             end = Offset(mid, size.height),
                             strokeWidth = 1.dp.toPx(),
                         )
-                        val extent = (value / span) * size.width
+                        val extent = ((value - measure.midpoint.toFloat()) / span) * size.width
                         val left = if (extent >= 0) mid else mid + extent
                         drawRoundRect(
                             color = barColor,
@@ -269,7 +273,7 @@ fun CategoryBars(rows: List<CategoryMood>, measure: Measure, modifier: Modifier 
                     }
                 }
                 Text(
-                    (if (measure.diverging) "%+.2f · n=%d" else "%.1f · n=%d").format(row.value, row.n),
+                    "%.1f · n=%d".format(row.value, row.n),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(88.dp),
