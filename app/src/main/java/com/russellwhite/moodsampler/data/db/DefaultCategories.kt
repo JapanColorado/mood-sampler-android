@@ -43,7 +43,10 @@ object DefaultCategories {
     val V1_ACTIVITIES: List<String> = V1_ACTIVITY_GROUPS.map { it.first }
     val V2_ADDED_ACTIVITIES: List<String> = V2_ADDED_ACTIVITY_GROUPS.map { it.first }
 
-    /** Always kept last in the activity list. */
+    /**
+     * The old catch-all activity: seeded up to schema v6, archived by the 6→7
+     * migration now that the capture form's "Other…" chip adds a real option instead.
+     */
     const val OTHER_ACTIVITY = "Other"
 
     val V1_LOCATIONS = listOf(
@@ -61,7 +64,7 @@ object DefaultCategories {
 
     /** Full seed for a fresh install, in display order. */
     val DEFAULT_CATEGORIES: Map<CategoryType, List<String>> = mapOf(
-        CategoryType.ACTIVITY to V1_ACTIVITIES + V2_ADDED_ACTIVITIES + OTHER_ACTIVITY,
+        CategoryType.ACTIVITY to V1_ACTIVITIES + V2_ADDED_ACTIVITIES,
         CategoryType.LOCATION to V1_LOCATIONS + V2_ADDED_LOCATIONS,
         CategoryType.SOCIAL to SOCIAL,
     )

@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
+import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
@@ -176,8 +177,8 @@ class DaoTest {
         try {
             val all = seeded.categoryDao().getAll()
             assertThat(all.map { it.label }).containsAtLeast("Work", "Home", "Alone", "Gaming", "Gym")
-            val activities = all.filter { it.type == CategoryType.ACTIVITY }.sortedBy { it.sortOrder }
-            assertThat(activities.last().label).isEqualTo("Other")
+            // The "Other…" chip replaces a seeded catch-all.
+            assertThat(all.map { it.label }).doesNotContain(DefaultCategories.OTHER_ACTIVITY)
         } finally {
             seeded.close()
             context.deleteDatabase(SEED_TEST_DB)

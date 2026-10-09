@@ -34,7 +34,7 @@ class EditSampleViewModel(
     private val promptId: Long,
     private val db: AppDatabase,
     private val repository: SampleRepository,
-    categoryRepository: CategoryRepository,
+    private val categoryRepository: CategoryRepository,
     private val photoStore: PhotoStore,
 ) : ViewModel() {
 
@@ -89,6 +89,9 @@ class EditSampleViewModel(
             _state.value = EditUiState.Done
         }
     }
+
+    /** An option typed into an "Other…" chip, added (or matched) for this and future prompts; its id. */
+    suspend fun addOption(type: CategoryType, label: String): Long? = categoryRepository.findOrAdd(type, label)
 
     fun delete() {
         viewModelScope.launch {

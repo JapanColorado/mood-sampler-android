@@ -78,6 +78,7 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                     suggestedLocationId = null,
                     saveLabel = "Update",
                     onSave = viewModel::save,
+                    onAddOption = viewModel::addOption,
                     onSkip = null,
                     modifier = Modifier.padding(padding),
                     header = {

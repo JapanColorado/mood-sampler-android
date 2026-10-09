@@ -23,10 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Group
@@ -50,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -68,6 +71,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.russellwhite.moodsampler.appGraph
@@ -75,9 +79,11 @@ import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.SkipReason
 import com.russellwhite.moodsampler.data.db.CategoryEntity
+import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.byActivityGroup
 import com.russellwhite.moodsampler.ui.dashboard.charts.MoodChartColors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /** Everything the user enters on the capture form; also the seed for the edit screen. */
 data class CaptureFormValues(
@@ -102,7 +108,8 @@ data class CaptureFormValues(
  *
  * Built to be answered in a few taps: three tap-to-pick scales up top, the
  * context (place, activities, company) pre-shortened below, note and photo
- * tucked behind chips, and Save pinned to the bottom.
+ * tucked behind chips, and Save pinned to the bottom. Each context section ends in
+ * an "Other…" chip that names a new option, kept for future prompts.
  */
 @Composable
 internal fun CaptureForm(
@@ -117,6 +124,8 @@ internal fun CaptureForm(
     suggestedLocationId: Long?,
     saveLabel: String,
     onSave: (CaptureFormValues) -> Unit,
+    /** Adds (or matches) an option typed into an "Other…" chip; its id, or null if nothing was added. */
+    onAddOption: suspend (CategoryType, String) -> Long?,
     onSkip: ((reason: String) -> Unit)?,
     modifier: Modifier = Modifier,
     header: @Composable () -> Unit = { Text("Right now…", style = MaterialTheme.typography.headlineMedium) },
@@ -135,6 +144,8 @@ internal fun CaptureForm(
     val photoStore = LocalContext.current.appGraph.photoStore
     var showSkip by rememberSaveable { mutableStateOf(false) }
     var placeTouched by rememberSaveable { mutableStateOf(false) }
+    var addingType by rememberSaveable { mutableStateOf<CategoryType?>(null) }
+    val scope = rememberCoroutineScope()
     val ready = valence != UNPICKED && arousal != UNPICKED
 
     // The fix may land after the form is on screen; only fill an untouched, empty place.
@@ -200,14 +211,17 @@ internal fun CaptureForm(
                 selectedId = locationId,
                 suggestedId = suggestedLocationId,
                 status = locationStatus,
+                onOther = { addingType = CategoryType.LOCATION },
             ) {
                 placeTouched = true
                 locationId = if (locationId == it) null else it
             }
-            ActivitySection(activities, usage, activityIds) { id ->
+            ActivitySection(activities, usage, activityIds, onOther = { addingType = CategoryType.ACTIVITY }) { id ->
                 if (!activityIds.remove(id)) activityIds.add(id)
             }
-            CompanySection(socials, socialId) { socialId = if (socialId == it) null else it }
+            CompanySection(socials, socialId, onOther = { addingType = CategoryType.SOCIAL }) {
+                socialId = if (socialId == it) null else it
+            }
 
             Extras(
                 noteOpen = noteOpen,
@@ -248,6 +262,20 @@ internal fun CaptureForm(
                 )
             },
         )
+    }
+
+    addingType?.let { type ->
+        AddOptionDialog(type, onDismiss = { addingType = null }) { label ->
+            addingType = null
+            scope.launch {
+                val id = onAddOption(type, label) ?: return@launch
+                when (type) {
+                    CategoryType.LOCATION -> { placeTouched = true; locationId = id }
+                    CategoryType.ACTIVITY -> if (id !in activityIds) activityIds.add(id)
+                    CategoryType.SOCIAL -> socialId = id
+                }
+            }
+        }
     }
 
     if (showSkip && onSkip != null) {
@@ -383,6 +411,7 @@ private fun PlaceSection(
     selectedId: Long?,
     suggestedId: Long?,
     status: LocationStatus,
+    onOther: () -> Unit,
     onSelect: (Long) -> Unit,
 ) {
     val shortlist = remember(locations, usage, suggestedId, selectedId) {
@@ -390,7 +419,7 @@ private fun PlaceSection(
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionLabel(Icons.Outlined.Place, "Where", locationCaption(status))
-        ExpandableChips(locations, shortlist) { option ->
+        ExpandableChips(locations, shortlist, onOther) { option ->
             FilterChip(
                 selected = option.id == selectedId,
                 onClick = { onSelect(option.id) },
@@ -413,6 +442,7 @@ private fun ActivitySection(
     activities: List<CategoryEntity>,
     usage: Map<Long, Int>,
     selectedIds: List<Long>,
+    onOther: () -> Unit,
     onToggle: (Long) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -436,10 +466,14 @@ private fun ActivitySection(
                 GroupHeader(group.label)
                 ChipFlow { options.forEach { chip(it) } }
             }
-            ChipFlow { MoreChip(expanded = true) { expanded = false } }
+            ChipFlow {
+                OtherChip(onOther)
+                MoreChip(expanded = true) { expanded = false }
+            }
         } else {
             ChipFlow {
                 visible.forEach { chip(it) }
+                OtherChip(onOther)
                 if (visible.size < activities.size) MoreChip(expanded = false) { expanded = true }
             }
         }
@@ -448,7 +482,12 @@ private fun ActivitySection(
 
 /** Who you're with, collapsed to one summary line until tapped; picking closes it again. */
 @Composable
-private fun CompanySection(options: List<CategoryEntity>, selectedId: Long?, onSelect: (Long) -> Unit) {
+private fun CompanySection(
+    options: List<CategoryEntity>,
+    selectedId: Long?,
+    onOther: () -> Unit,
+    onSelect: (Long) -> Unit,
+) {
     var open by rememberSaveable { mutableStateOf(false) }
     val selected = options.firstOrNull { it.id == selectedId }
     Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -485,6 +524,7 @@ private fun CompanySection(options: List<CategoryEntity>, selectedId: Long?, onS
                         label = { Text(option.label) },
                     )
                 }
+                OtherChip { onOther(); open = false }
             }
         }
     }
@@ -546,17 +586,19 @@ private fun BottomBar(saveLabel: String, ready: Boolean, onSkip: (() -> Unit)?, 
     }
 }
 
-/** Shows [shortlist] with a More/Fewer toggle that swaps in the full [options] list. */
+/** Shows [shortlist] with a More/Fewer toggle that swaps in the full [options] list, then "Other…". */
 @Composable
 private fun ExpandableChips(
     options: List<CategoryEntity>,
     shortlist: List<CategoryEntity>,
+    onOther: () -> Unit,
     chip: @Composable (CategoryEntity) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val hasMore = shortlist.size < options.size
     ChipFlow(Modifier.animateContentSize()) {
         (if (expanded || !hasMore) options else shortlist).forEach { chip(it) }
+        OtherChip(onOther)
         if (hasMore) MoreChip(expanded) { expanded = !expanded }
     }
 }
@@ -564,6 +606,62 @@ private fun ExpandableChips(
 @Composable
 private fun MoreChip(expanded: Boolean, onClick: () -> Unit) {
     AssistChip(onClick = onClick, label = { Text(if (expanded) "Fewer" else "More…") })
+}
+
+/** Opens [AddOptionDialog] to name an option that isn't in the list yet. */
+@Composable
+private fun OtherChip(onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text("Other…") },
+        leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null, Modifier.size(AssistChipDefaults.IconSize)) },
+    )
+}
+
+/** Names a new option for [type]; it's selected now and offered on every future prompt. */
+@Composable
+private fun AddOptionDialog(type: CategoryType, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    val submit = { if (text.isNotBlank()) onConfirm(text.trim()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                when (type) {
+                    CategoryType.LOCATION -> "Somewhere else?"
+                    CategoryType.ACTIVITY -> "Doing something else?"
+                    CategoryType.SOCIAL -> "With someone else?"
+                }
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                singleLine = true,
+                placeholder = {
+                    Text(
+                        when (type) {
+                            CategoryType.LOCATION -> "e.g. Grandma's house"
+                            CategoryType.ACTIVITY -> "e.g. Gardening"
+                            CategoryType.SOCIAL -> "e.g. Roommates"
+                        }
+                    )
+                },
+                supportingText = { Text("Saved as an option for future prompts.") },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+            )
+        },
+        confirmButton = { TextButton(onClick = submit, enabled = text.isNotBlank()) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+    LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

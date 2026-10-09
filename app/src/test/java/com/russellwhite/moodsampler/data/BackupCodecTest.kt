@@ -60,6 +60,14 @@ class BackupCodecTest {
     }
 
     @Test
+    fun preV7OtherActivityIsArchivedOnImport() {
+        val other = CategoryDto(9, "ACTIVITY", "Other", 30, false, "OTHER")
+        assertThat(other.toEntity(schemaVersion = 6).isArchived).isTrue()
+        assertThat(other.toEntity(schemaVersion = 7).isArchived).isFalse()
+        assertThat(CategoryDto(4, "LOCATION", "Other", 3, false).toEntity(schemaVersion = 6).isArchived).isFalse()
+    }
+
+    @Test
     fun v5SamplesStretchOntoZeroToTen() {
         val entity = sample.samples.single().toEntity(schemaVersion = 5)
         assertThat(entity.valence).isEqualTo(MoodScale.fromV5(7))

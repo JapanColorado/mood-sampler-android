@@ -134,11 +134,15 @@ object BackupCodec {
 fun AppSettings.toDto() = SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation)
 
 fun CategoryEntity.toDto() = CategoryDto(id, type.name, label, sortOrder, isArchived, group)
-fun CategoryDto.toEntity(): CategoryEntity {
+/** [schemaVersion] is the backup's: pre-v7 files still carry an active "Other" activity. */
+fun CategoryDto.toEntity(schemaVersion: Int = AppDatabase.VERSION): CategoryEntity {
     val t = CategoryType.valueOf(type)
     // Pre-v3 backups carry no group: give default activities theirs, everything else OTHER.
     val g = if (t == CategoryType.ACTIVITY) group ?: DefaultCategories.groupFor(label).name else null
-    return CategoryEntity(id, t, label, sortOrder, isArchived, g)
+    // Mirrors MIGRATION_6_7.
+    val oldOther = schemaVersion < 7 && t == CategoryType.ACTIVITY &&
+        label.equals(DefaultCategories.OTHER_ACTIVITY, ignoreCase = true)
+    return CategoryEntity(id, t, label, sortOrder, isArchived || oldOther, g)
 }
 
 fun ScheduledPromptEntity.toDto() = PromptDto(

@@ -12,6 +12,7 @@ import com.russellwhite.moodsampler.data.db.MIGRATION_2_3
 import com.russellwhite.moodsampler.data.db.MIGRATION_3_4
 import com.russellwhite.moodsampler.data.db.MIGRATION_4_6
 import com.russellwhite.moodsampler.data.db.MIGRATION_5_6
+import com.russellwhite.moodsampler.data.db.MIGRATION_6_7
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -206,6 +207,37 @@ class MigrationTest {
                 assertThat(c.getInt(0)).isEqualTo(MoodScale.fromV5(n))
                 assertThat(c.getInt(1)).isEqualTo(MoodScale.fromV5(11 - n))
             }
+        }
+    }
+
+    @Test
+    fun migrate6To7_archivesOtherActivityAndKeepsItsSamples() {
+        helper.createDatabase(DB, 6).apply {
+            insertCategory("ACTIVITY", "Work", 1)
+            insertCategory("ACTIVITY", "Other", 2)
+            insertCategory("LOCATION", "Other", 1)
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status)
+                   VALUES (1, 1, '2026-10-09', 0, 'ANSWERED')"""
+            )
+            execSQL("INSERT INTO sample (id, promptId, valence, arousal, createdAtEpochMs) VALUES (1, 1, 5, 5, 1)")
+            execSQL("INSERT INTO sample_activity (sampleId, categoryId) VALUES (1, 2)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 7, true, MIGRATION_6_7)
+
+        db.query("SELECT type, label, isArchived FROM category ORDER BY id").use { c ->
+            val rows = generateSequence { if (c.moveToNext()) Triple(c.getString(0), c.getString(1), c.getInt(2)) else null }.toList()
+            assertThat(rows).containsExactly(
+                Triple("ACTIVITY", "Work", 0),
+                Triple("ACTIVITY", "Other", 1),
+                Triple("LOCATION", "Other", 0),
+            ).inOrder()
+        }
+        db.query("SELECT categoryId FROM sample_activity WHERE sampleId = 1").use { c ->
+            c.moveToFirst()
+            assertThat(c.getLong(0)).isEqualTo(2)
         }
     }
 

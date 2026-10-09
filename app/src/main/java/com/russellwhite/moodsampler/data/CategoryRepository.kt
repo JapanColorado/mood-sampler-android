@@ -38,6 +38,30 @@ class CategoryRepository(private val db: AppDatabase) {
         dao.insert(CategoryEntity(type = type, label = trimmed, sortOrder = dao.maxSortOrder(type) + 1, group = group))
     }
 
+    /**
+     * The id of the [type] category labelled [label] (case-insensitive), adding it
+     * when there is none and restoring it when archived. Null for a blank label.
+     */
+    suspend fun findOrAdd(type: CategoryType, label: String): Long? {
+        val trimmed = label.trim()
+        if (trimmed.isEmpty()) return null
+        return db.withTransaction {
+            val existing = dao.byType(type).firstOrNull { it.label.equals(trimmed, ignoreCase = true) }
+            when {
+                existing == null -> {
+                    val group = if (type == CategoryType.ACTIVITY) ActivityGroup.OTHER.name else null
+                    dao.insert(CategoryEntity(type = type, label = trimmed, sortOrder = dao.maxSortOrder(type) + 1, group = group))
+                }
+                existing.isArchived -> {
+                    dao.update(existing.copy(isArchived = false))
+                    renumber(type)
+                    existing.id
+                }
+                else -> existing.id
+            }
+        }
+    }
+
     /** Move an activity to another [ActivityGroup]; no-op for other types. */
     suspend fun setGroup(category: CategoryEntity, group: ActivityGroup) {
         if (category.type != CategoryType.ACTIVITY) return

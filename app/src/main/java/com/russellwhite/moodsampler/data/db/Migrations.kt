@@ -186,6 +186,20 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * v6 → v7: the "Other" activity is archived — the capture form's "Other…" chip now
+ * adds a named option instead. Samples already tagged with it keep it in their
+ * history. No schema change.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "UPDATE `category` SET `isArchived` = 1 WHERE `type` = 'ACTIVITY' AND lower(`label`) = lower(?)",
+            arrayOf<Any>(DefaultCategories.OTHER_ACTIVITY),
+        )
+    }
+}
+
 private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
     db.execSQL(
         """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)

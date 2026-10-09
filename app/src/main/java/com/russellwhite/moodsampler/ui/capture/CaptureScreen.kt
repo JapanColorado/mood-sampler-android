@@ -55,6 +55,7 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
                 suggestedLocationId = suggested,
                 saveLabel = "Save",
                 onSave = viewModel::save,
+                onAddOption = viewModel::addOption,
                 onSkip = viewModel::skip,
             )
         }

@@ -59,7 +59,7 @@ class CaptureViewModel(
     private val sampleRepository: SampleRepository,
     private val scheduler: PromptScheduler,
     settings: SettingsRepository,
-    categoryRepository: CategoryRepository,
+    private val categoryRepository: CategoryRepository,
     private val locationProvider: LocationProvider,
     private val photoStore: PhotoStore,
     private val clock: Clock = DeviceClock,
@@ -160,6 +160,9 @@ class CaptureViewModel(
             }
         }
     }
+
+    /** An option typed into an "Other…" chip, added (or matched) for this and future prompts; its id. */
+    suspend fun addOption(type: CategoryType, label: String): Long? = categoryRepository.findOrAdd(type, label)
 
     fun skip(reason: String) {
         if (_state.value != CaptureUiState.Answerable) return
