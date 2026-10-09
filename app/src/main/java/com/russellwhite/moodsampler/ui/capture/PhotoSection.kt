@@ -21,9 +21,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -103,8 +103,10 @@ private fun PhotoAction(label: String, onClick: () -> Unit) {
 internal fun PhotoImage(uri: Uri, height: Dp, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val targetPx = with(LocalDensity.current) { height.roundToPx() * 2 }
-    val bitmap by produceState<ImageBitmap?>(null, uri) {
-        value = withContext(Dispatchers.IO) { decodeForDisplay(context, uri, targetPx) }
+    // Not produceState: its lint check misreads the assignment in this lambda as missing.
+    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri) {
+        bitmap = withContext(Dispatchers.IO) { decodeForDisplay(context, uri, targetPx) }
     }
     Box(modifier.height(height).clip(RoundedCornerShape(12.dp))) {
         bitmap?.let {
