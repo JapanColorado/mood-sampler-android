@@ -100,7 +100,7 @@ collides with a release install.
 7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts,
    including "Pain over time" and "Valence by pain level"; toggle the
    breakdown between Valence / Energy / Pain.
-   Settings → Export CSV → share to yourself and eyeball the 15 columns.
+   Settings → Export CSV → share to yourself and eyeball the 16 columns.
 8. Settings → change prompts/day → `pixi run alarms` shows a re-armed schedule.
 9. Fire a test prompt → the notification offers **Skip** and **Remind me in
    5 min**; snooze → `pixi run alarms` shows the re-show alarm next to the
@@ -135,7 +135,7 @@ collides with a release install.
 
 ## Data
 
-Room DB `moodsampler.db`, schema v6 (`app/schemas/` holds the exported JSON
+Room DB `moodsampler.db`, schema v7 (`app/schemas/` holds the exported JSON
 for every version; migrations are explicit — there is no destructive fallback):
 
 - `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
@@ -145,20 +145,25 @@ for every version; migrations are explicit — there is no destructive fallback)
   (v6; v5 used 1–10 and v4 and earlier −1..1 slider values, both converted on migration), `pain` 0–10
   (null for samples recorded before v2), place and company ids, note, and
   (v3) `latitude`/`longitude`/`accuracyM`/`fixAtEpochMs` — all null when
-  location was off, denied or unavailable.
+  location was off, denied or unavailable. `photoPath` (v4) is the file name
+  of an optional photo in private app storage.
 - `sample_activity` — many-to-many sample ↔ activity (a sample can tag several).
 - `category` — editable activity/place/company lists; archived, never deleted,
   so history keeps its labels. `groupKey` (v3) is the `ActivityGroup` of an
   activity. The v1→v2 migration back-fills the new default labels for existing
   installs, skipping any the user already has; v2→v3 assigns groups to the
-  default activity labels and puts everything else in `OTHER`.
+  default activity labels and puts everything else in `OTHER`. v6→v7 archives
+  the default "Other" activity (the capture form's "Other…" chip adds a named
+  option instead); samples already tagged with it keep it.
 
 CSV columns: `scheduled_at_iso, answered_at_iso, status, skip_reason, latency_s,
 valence, arousal, pain, activities, location, social, note, latitude,
-longitude, accuracy_m` — missed prompts appear as rows with empty measures;
+longitude, accuracy_m, photo` (`photo` is the stored file name) — missed prompts appear as rows with empty measures;
 several activities are joined with `; `.
 
 JSON backup (`Settings → Back up to file…`) contains every table plus the
 sampling settings (including the auto-location switch) with ids preserved;
 restore replaces all local data and redraws the schedule. Pre-v3 backups
 restore fine: default activities get their groups, coordinates stay empty.
+Photos are referenced by file name only, so a restore on the same phone keeps
+them; restored elsewhere, those answers have no photo.
