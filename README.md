@@ -68,31 +68,32 @@ mood and time use — unlike diaries, which oversample memorable moments.
 
 ## Building
 
-Requires Java 17+ and an Android SDK at the path in `local.properties`
-(`sdk.dir=…`; not committed). First-time setup on a fresh machine:
+Requires [pixi](https://pixi.sh) (it supplies JDK 21) and an Android SDK at
+`~/Android/Sdk` (exported as `ANDROID_HOME` on pixi activation). Never run
+`./gradlew` outside pixi. First-time setup on a fresh machine:
 
 ```sh
-sdkmanager --sdk_root=$HOME/Android/sdk "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-yes | sdkmanager --sdk_root=$HOME/Android/sdk --licenses
-echo "sdk.dir=$HOME/Android/sdk" > local.properties
-pixi install          # provides gradle for the one-time wrapper bootstrap
+sdkmanager --sdk_root=$HOME/Android/Sdk "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+yes | sdkmanager --sdk_root=$HOME/Android/Sdk --licenses
+pixi install          # one-time: fetches the JDK (and gradle for the wrapper bootstrap)
 pixi run bootstrap    # only if gradle/wrapper is missing
 ```
 
 Day-to-day (pixi tasks wrap `./gradlew`):
 
 ```sh
-pixi run build            # assembleRelease (signed if keystore.properties exists)
+pixi run build            # assembleRelease (signed if keystore.properties exists, else debug-signed)
 pixi run install          # build + install release on the connected phone
 pixi run run              # install release + launch
 pixi run build-debug / install-debug / run-debug   # debug variant (.debug appId)
 pixi run test             # JVM unit tests (schedule generator, CSV format)
+pixi run lint             # Android lint
 pixi run connected-test   # instrumented Room DAO tests (device required)
 pixi run alarms           # inspect armed alarms via dumpsys
 pixi run logs             # filtered logcat
 ```
 
-The debug build id is `com.russellwhite.moodsampler.debug`, so it never
+The debug build id is `dev.russell.moodsampler.debug`, so it never
 collides with a release install.
 
 ## Manual verification checklist (phone over USB)
@@ -125,7 +126,7 @@ collides with a release install.
 12. Settings → tap a category chip → usage count, ▲▼ reorder, Archive →
     "Archived (1)" → Restore.
 13. Settings → **Back up to file…** → `adb shell pm clear
-    com.russellwhite.moodsampler.debug` → `pixi run run-debug` → onboarding appears
+    dev.russell.moodsampler.debug` → `pixi run run-debug` → onboarding appears
     (no Home flash), grant notifications, **Start sampling** → Settings →
     **Restore from file…** → confirm → History/Insights match, editing an old
     entry works, `pixi run alarms` shows one re-armed prompt alarm.

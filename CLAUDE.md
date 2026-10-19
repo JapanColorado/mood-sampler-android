@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Mood Sampler: an Android app (Kotlin, Jetpack Compose / Material 3, single `app` module) for random **experience sampling**. It prompts the user at random moments during waking hours and records a quick mood/activity capture. `README.md` has the full feature list, the data model, and an 18-step manual verification checklist to run on a phone.
+Mood Sampler (`dev.russell.moodsampler`): an Android app (Kotlin, Jetpack Compose / Material 3, single `app` module) for random **experience sampling**. It prompts the user at random moments during waking hours and records a quick mood/activity capture. `README.md` has the full feature list, the data model, and an 18-step manual verification checklist to run on a phone.
 
 ## Commands
 
@@ -11,16 +11,16 @@ pixi tasks wrap `./gradlew` (the wrapper pins Gradle 8.11.1; pixi supplies JDK 2
 ```sh
 pixi run test             # JVM unit tests (./gradlew testDebugUnitTest)
 pixi run lint             # ./gradlew lintDebug
-pixi run build-debug      # assembleDebug; `build` = assembleRelease (minified, signed only if keystore.properties exists)
+pixi run build-debug      # assembleDebug; `build` = assembleRelease (minified, signed only if keystore.properties exists, else debug-signed)
 pixi run run-debug        # install debug on the connected adb device and launch it
 pixi run connected-test   # instrumented tests (Room migrations, backup import); needs a device
 pixi run alarms           # dumpsys the armed AlarmManager alarms
 pixi run logs             # logcat filtered to tag "MoodSampler"
 ```
 
-Single test: `./gradlew testDebugUnitTest --tests 'com.russellwhite.moodsampler.scheduling.ScheduleGeneratorTest'` (append `.methodName` to run one method). For an instrumented test: `./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.russellwhite.moodsampler.data.MigrationTest`.
+Single test: `./gradlew testDebugUnitTest --tests 'dev.russell.moodsampler.scheduling.ScheduleGeneratorTest'` (append `.methodName` to run one method). For an instrumented test: `./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.russell.moodsampler.data.MigrationTest`.
 
-The debug build uses the appId `com.russellwhite.moodsampler.debug`, so it installs alongside the release build. The debug build also puts "fire test prompt in 10 s" and "seed 30 days of fake data" buttons on Home (`BuildConfig.DEBUG`).
+The debug build uses the appId `dev.russell.moodsampler.debug`, so it installs alongside the release build. The debug build also puts "fire test prompt in 10 s" and "seed 30 days of fake data" buttons on Home (`BuildConfig.DEBUG`).
 
 ## Architecture
 

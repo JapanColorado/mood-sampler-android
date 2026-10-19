@@ -1,0 +1,13 @@
+package dev.russell.moodsampler
+
+import android.app.Application
+
+class MoodSamplerApp : Application() {
+    lateinit var graph: AppGraph
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        graph = AppGraph(this)
+    }
+}

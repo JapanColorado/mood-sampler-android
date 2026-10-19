@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "com.russellwhite.moodsampler"
+    namespace = "dev.russell.moodsampler"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.russellwhite.moodsampler"
+        applicationId = "dev.russell.moodsampler"
         minSdk = 31
         targetSdk = 35
         versionCode = 5
@@ -22,7 +22,7 @@ android {
     }
 
     // Release signing: gitignored keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
-    // Absent => the release APK is built unsigned.
+    // Absent => the release APK is debug-signed.
     val keystoreProps = rootProject.file("keystore.properties")
         .takeIf { it.exists() }
         ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
@@ -44,7 +44,7 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

@@ -11,3 +11,7 @@ captures/
 
 # Release signing (keystore lives outside the repo)
 keystore.properties
+
+# Shared Android-Apps baseline
+*.jks
+*.keystore
