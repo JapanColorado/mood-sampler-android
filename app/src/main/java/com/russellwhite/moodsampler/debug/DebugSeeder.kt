@@ -6,6 +6,7 @@ import com.russellwhite.moodsampler.data.SkipReason
 import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleActivityCrossRef
+import com.russellwhite.moodsampler.data.db.SampleDeviceEntity
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import java.time.LocalDate
@@ -31,6 +32,10 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
     val socials = categories.filter { it.type == CategoryType.SOCIAL }
 
     val skipReasons = SkipReason.CAPTURE_CHOICES.map { it.first }
+    // Fake device hashes: two per company option, your own earbuds everywhere, plus passers-by.
+    // They never match a real scan; they just give sample_device realistic shape.
+    val companyDevices = socials.associate { s -> s.id to List(2) { "seed%04x%02d".format(s.id, it) } }
+    val ownEarbuds = "seedself000"
 
     val today = LocalDate.now()
     for (dayOffset in days downTo 1) {
@@ -63,6 +68,7 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                 // Pain drags on valence a little, so the mood-vs-pain chart has a slope.
                 val pain = if (painFreeDay) 0 else
                     (painBaseline - 3 * valence + random.nextDouble(-1.0, 1.0)).roundToInt().coerceIn(0, 10)
+                val socialId = socials.randomOrNull(random)?.id
                 val sampleId = sampleDao.insert(
                     SampleEntity(
                         promptId = promptId,
@@ -70,11 +76,14 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                         arousal = MoodScale.fromLegacy(arousal.toFloat()),
                         pain = pain,
                         locationId = locations.randomOrNull(random)?.id,
-                        socialId = socials.randomOrNull(random)?.id,
+                        socialId = socialId,
                         note = null,
                         createdAtEpochMs = fireAt + 120_000,
                     )
                 )
+                val devices = (companyDevices[socialId].orEmpty().filter { random.nextFloat() < 0.7f } +
+                    ownEarbuds + List(random.nextInt(0, 5)) { "seednoise%06x".format(random.nextInt(0x1000000)) }).distinct()
+                sampleDao.insertDevices(devices.map { SampleDeviceEntity(sampleId, it) })
                 // Real moments overlap: 1–3 activities per sample.
                 val tagged = activities.shuffled(random).take(random.nextInt(1, 4))
                 if (tagged.isNotEmpty()) {

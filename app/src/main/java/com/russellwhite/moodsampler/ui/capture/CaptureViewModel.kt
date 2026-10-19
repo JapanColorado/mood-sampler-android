@@ -8,6 +8,8 @@ import com.russellwhite.moodsampler.data.MoodScale
 import com.russellwhite.moodsampler.data.PainScale
 import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
+import com.russellwhite.moodsampler.data.bluetooth.BluetoothScanner
+import com.russellwhite.moodsampler.data.bluetooth.DeviceFingerprint
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.db.CategoryEntity
 import com.russellwhite.moodsampler.data.db.CategoryType
@@ -53,14 +55,26 @@ sealed interface LocationStatus {
     data object Unavailable : LocationStatus
 }
 
+/** Progress of the one-shot nearby-device scan shown as a caption on the company row. */
+sealed interface CompanyStatus {
+    /** Disabled in settings or permission not granted. */
+    data object Off : CompanyStatus
+    data object Scanning : CompanyStatus
+    data object Scanned : CompanyStatus
+
+    /** Bluetooth is off or the scan failed. */
+    data object Unavailable : CompanyStatus
+}
+
 class CaptureViewModel(
     private val promptId: Long,
     private val db: AppDatabase,
     private val sampleRepository: SampleRepository,
     private val scheduler: PromptScheduler,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
     private val categoryRepository: CategoryRepository,
     private val locationProvider: LocationProvider,
+    private val bluetoothScanner: BluetoothScanner,
     private val photoStore: PhotoStore,
     private val clock: Clock = DeviceClock,
 ) : ViewModel() {
@@ -84,6 +98,16 @@ class CaptureViewModel(
     private val _suggestedLocationId = MutableStateFlow<Long?>(null)
     val suggestedLocationId: StateFlow<Long?> = _suggestedLocationId
 
+    private val _companyStatus = MutableStateFlow<CompanyStatus>(CompanyStatus.Off)
+    val companyStatus: StateFlow<CompanyStatus> = _companyStatus
+
+    /** Hashed devices to store with the sample; empty until the scan finishes. */
+    private var deviceHashes: Set<String> = emptySet()
+
+    /** Company matched from past answers with the same devices around; null when they say nothing. */
+    private val _suggestedSocialId = MutableStateFlow<Long?>(null)
+    val suggestedSocialId: StateFlow<Long?> = _suggestedSocialId
+
     private var expiryMinutes = 20
 
     init {
@@ -106,6 +130,23 @@ class CaptureViewModel(
             if (_state.value == CaptureUiState.Answerable && current.autoLocation && locationProvider.hasPermission()) {
                 acquireLocation()
             }
+            if (_state.value == CaptureUiState.Answerable && current.autoCompany && bluetoothScanner.hasPermission()) {
+                scanNearby()
+            }
+        }
+    }
+
+    private fun scanNearby() {
+        _companyStatus.value = CompanyStatus.Scanning
+        viewModelScope.launch {
+            val devices = bluetoothScanner.scan()
+            if (devices == null) {
+                _companyStatus.value = CompanyStatus.Unavailable
+                return@launch
+            }
+            deviceHashes = DeviceFingerprint.hashes(devices, settings.deviceSalt())
+            _companyStatus.value = CompanyStatus.Scanned
+            _suggestedSocialId.value = sampleRepository.suggestCompany(deviceHashes)
         }
     }
 
@@ -149,6 +190,7 @@ class CaptureViewModel(
                     photoPath = photo,
                 ),
                 activityIds = values.activityIds,
+                deviceHashes = deviceHashes,
                 answeredAtMs = clock.millis(),
             )
             if (ok) {
@@ -186,6 +228,7 @@ class CaptureViewModel(
                 settings = graph.settingsRepository,
                 categoryRepository = graph.categoryRepository,
                 locationProvider = graph.locationProvider,
+                bluetoothScanner = graph.bluetoothScanner,
                 photoStore = graph.photoStore,
             )
         }

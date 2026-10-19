@@ -6,7 +6,8 @@ The phone prompts you at random moments during waking hours; each prompt is a
 what/where/with-whom quick-picks — several activities at once, grouped under
 headers for fast scanning — and an optional note). Optionally, each answer
 records one location fix and pre-selects your place from where you answered
-before. Over weeks this builds a statistically representative picture of your
+before, and a short Bluetooth scan pre-selects who you're with from the devices
+that were around last time. Over weeks this builds a statistically representative picture of your
 mood and time use — unlike diaries, which oversample memorable moments.
 
 - Kotlin + Jetpack Compose (Material 3), single module, manual DI
@@ -23,7 +24,7 @@ mood and time use — unlike diaries, which oversample memorable moments.
   now" records a skip *reason* (busy, driving, sleeping, not safe, other) —
   skips still count as missed
 - First-run onboarding explains the method, asks for notification and
-  exact-alarm permission, and sets the sampling day; nothing is scheduled until
+  exact-alarm permission (plus optional location and nearby devices), and sets the sampling day; nothing is scheduled until
   it finishes
 - Follows the phone's time zone: day start/end are local times, and the
   upcoming schedule is redrawn automatically when the zone changes (travel)
@@ -40,6 +41,17 @@ mood and time use — unlike diaries, which oversample memorable moments.
   ~150 m (wider when the fix is imprecise) vote for a place, and the winner is
   pre-selected — so at familiar spots the place needs zero taps. Skip/snooze
   from the notification record nothing; editing an old answer keeps its fix
+- Optional company suggestion: with the nearby-devices permission
+  (`BLUETOOTH_SCAN`, flagged `neverForLocation`) and the Settings switch on,
+  the capture screen runs a **4-second BLE scan** while it is open. Devices
+  within roughly a room (RSSI ≥ −85 dBm, strongest 40) are stored on the sample
+  as salted 64-bit hashes of their address and advertised name, never the raw
+  values; addresses that rotate (most phones) are skipped on Android 15+.
+  A device seen with ≥ 2 past answers, ≥ 60 % of them with one company option
+  and clearly above that option's usual share, votes for it; the winner is
+  pre-selected if the user hasn't picked one. Own earbuds and other ever-present
+  devices therefore say nothing. With nothing informative nearby, nothing is
+  pre-selected. The company row always shows every option
 - Simpler place picking: the row shows only the suggested place, the most-used
   places and the current selection; **More…** reveals the full list. With no
   fix nothing is pre-selected (a stale guess would bias the data)
@@ -132,10 +144,17 @@ collides with a release install.
     has lat/lon/accuracy in the last three columns.
 17. Switch the setting off (or deny the permission) → the next prompt shows no
     caption, nothing is pre-selected, saving works, CSV lat/lon are empty.
+18. Settings → "Suggest company from nearby devices" on → **Allow nearby
+    devices** → fire a test prompt → the "With" row reads "checking nearby
+    devices…" for a few seconds and shows every option without a tap. Answer a
+    few prompts with a Bluetooth device (watch, earbuds, speaker) close by and
+    the same company, plus a couple with a different company away from it →
+    the next prompt near that device pre-selects that company. With Bluetooth off the caption
+    says "Bluetooth off" and nothing is pre-selected.
 
 ## Data
 
-Room DB `moodsampler.db`, schema v7 (`app/schemas/` holds the exported JSON
+Room DB `moodsampler.db`, schema v8 (`app/schemas/` holds the exported JSON
 for every version; migrations are explicit — there is no destructive fallback):
 
 - `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
@@ -148,13 +167,16 @@ for every version; migrations are explicit — there is no destructive fallback)
   location was off, denied or unavailable. `photoPath` (v4) is the file name
   of an optional photo in private app storage.
 - `sample_activity` — many-to-many sample ↔ activity (a sample can tag several).
+- `sample_device` (v8) — salted hashes of the Bluetooth devices nearby while a
+  sample was answered; trains company suggestions. Not in the CSV.
 - `category` — editable activity/place/company lists; archived, never deleted,
   so history keeps its labels. `groupKey` (v3) is the `ActivityGroup` of an
   activity. The v1→v2 migration back-fills the new default labels for existing
   installs, skipping any the user already has; v2→v3 assigns groups to the
   default activity labels and puts everything else in `OTHER`. v6→v7 archives
   the default "Other" activity (the capture form's "Other…" chip adds a named
-  option instead); samples already tagged with it keep it.
+  option instead); samples already tagged with it keep it. v7→v8 adds the
+  empty `sample_device` table.
 
 CSV columns: `scheduled_at_iso, answered_at_iso, status, skip_reason, latency_s,
 valence, arousal, pain, activities, location, social, note, latitude,
@@ -162,7 +184,8 @@ longitude, accuracy_m, photo` (`photo` is the stored file name) — missed promp
 several activities are joined with `; `.
 
 JSON backup (`Settings → Back up to file…`) contains every table plus the
-sampling settings (including the auto-location switch) with ids preserved;
+sampling settings (including the auto-location and company-scan switches and
+the device-hash salt, so suggestions keep working after a restore) with ids preserved;
 restore replaces all local data and redraws the schedule. Pre-v3 backups
 restore fine: default activities get their groups, coordinates stay empty.
 Photos are referenced by file name only, so a restore on the same phone keeps

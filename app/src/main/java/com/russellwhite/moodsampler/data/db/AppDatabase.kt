@@ -12,6 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SampleEntity::class,
         SampleActivityCrossRef::class,
         CategoryEntity::class,
+        SampleDeviceEntity::class,
     ],
     version = AppDatabase.VERSION,
     exportSchema = true,
@@ -22,14 +23,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
 
     companion object {
-        const val VERSION = 7
+        const val VERSION = 8
 
         const val NAME = "moodsampler.db"
 
         /** [name] is overridable so instrumented tests never touch the real database. */
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_6, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_6, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .addCallback(SeedCallback)
                 .build()
 

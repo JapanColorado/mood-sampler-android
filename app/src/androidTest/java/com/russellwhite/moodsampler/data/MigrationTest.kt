@@ -13,6 +13,7 @@ import com.russellwhite.moodsampler.data.db.MIGRATION_3_4
 import com.russellwhite.moodsampler.data.db.MIGRATION_4_6
 import com.russellwhite.moodsampler.data.db.MIGRATION_5_6
 import com.russellwhite.moodsampler.data.db.MIGRATION_6_7
+import com.russellwhite.moodsampler.data.db.MIGRATION_7_8
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -238,6 +239,32 @@ class MigrationTest {
         db.query("SELECT categoryId FROM sample_activity WHERE sampleId = 1").use { c ->
             c.moveToFirst()
             assertThat(c.getLong(0)).isEqualTo(2)
+        }
+    }
+
+    @Test
+    fun migrate7To8_addsEmptyDeviceTableThatCascadesWithSamples() {
+        helper.createDatabase(DB, 7).apply {
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status)
+                   VALUES (1, 1, '2026-10-16', 0, 'ANSWERED')"""
+            )
+            execSQL("INSERT INTO sample (id, promptId, valence, arousal, createdAtEpochMs) VALUES (1, 1, 5, 5, 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 8, true, MIGRATION_7_8)
+
+        db.query("SELECT COUNT(*) FROM sample_device").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(0)
+        }
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL("INSERT INTO sample_device (sampleId, deviceHash) VALUES (1, 'abc')")
+        db.execSQL("DELETE FROM sample WHERE id = 1")
+        db.query("SELECT COUNT(*) FROM sample_device").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(0)
         }
     }
 

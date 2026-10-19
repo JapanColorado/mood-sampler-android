@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Mood Sampler: an Android app (Kotlin, Jetpack Compose / Material 3, single `app` module) for random **experience sampling**. It prompts the user at random moments during waking hours and records a quick mood/activity capture. `README.md` has the full feature list, the data model, and a 17-step manual verification checklist to run on a phone.
+Mood Sampler: an Android app (Kotlin, Jetpack Compose / Material 3, single `app` module) for random **experience sampling**. It prompts the user at random moments during waking hours and records a quick mood/activity capture. `README.md` has the full feature list, the data model, and an 18-step manual verification checklist to run on a phone.
 
 ## Commands
 
@@ -34,11 +34,11 @@ The debug build uses the appId `com.russellwhite.moodsampler.debug`, so it insta
 - **Sampling days are not calendar days.** If the end time is earlier than the start time, the day runs past midnight. Use `SamplingConfig.samplingDayFor` whenever you group by day (stats, charts, CSV, History).
 - **Time zones**: always use `DeviceClock`, which re-reads the system zone on every call, never `Clock.systemDefaultZone()`. Prompts are stored as instants. When the zone changes, `ensureScheduled` redraws the future schedule.
 - **Never show upcoming prompt times in the UI.** Anticipation biases the sampling.
-- **Data** (`data/`): Room (`data/db/`), DataStore settings (`data/settings/`), `CsvExporter`, a JSON backup/restore (`data/backup/`), `PhotoStore` (photos live in `filesDir`; the sample stores only the file name), and a one-shot foreground location fix plus `PlaceMatcher`, which suggests a place from nearby past answers. `OnboardingGate` stops any scheduling until onboarding finishes.
+- **Data** (`data/`): Room (`data/db/`), DataStore settings (`data/settings/`), `CsvExporter`, a JSON backup/restore (`data/backup/`), `PhotoStore` (photos live in `filesDir`; the sample stores only the file name), and a one-shot foreground location fix plus `PlaceMatcher`, which suggests a place from nearby past answers, and (`data/bluetooth/`) a few-second BLE scan whose salted device hashes feed `CompanyMatcher`, which suggests company the same way. `OnboardingGate` stops any scheduling until onboarding finishes.
 
 ## Database changes
 
-- The schema version is `AppDatabase.VERSION`, currently 7. Keep the README's "Data" section in step with it.
+- The schema version is `AppDatabase.VERSION`, currently 8. Keep the README's "Data" section in step with it.
 - Migrations live in `data/db/Migrations.kt`. They are explicit, and there is **no destructive fallback**. A new migration must be registered in `AppDatabase.build`'s `addMigrations(...)`.
 - KSP exports schemas to `app/schemas/`. Commit the new `N.json`, because `MigrationTest` also uses these files as fixtures. Add a `MigrationTest` case for each migration.
 - A schema or default-category change usually also needs updates to:

@@ -45,6 +45,8 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
             val usage by viewModel.usage.collectAsState()
             val locationStatus by viewModel.locationStatus.collectAsState()
             val suggested by viewModel.suggestedLocationId.collectAsState()
+            val companyStatus by viewModel.companyStatus.collectAsState()
+            val suggestedSocial by viewModel.suggestedSocialId.collectAsState()
             CaptureForm(
                 initial = CaptureFormValues(),
                 activities = activities,
@@ -53,6 +55,8 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
                 usage = usage,
                 locationStatus = locationStatus,
                 suggestedLocationId = suggested,
+                companyStatus = companyStatus,
+                suggestedSocialId = suggestedSocial,
                 saveLabel = "Save",
                 onSave = viewModel::save,
                 onAddOption = viewModel::addOption,

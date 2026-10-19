@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.ui.capture.GroupHeader
+import com.russellwhite.moodsampler.ui.rememberBluetoothPermission
 import com.russellwhite.moodsampler.ui.rememberLocationPermission
 import com.russellwhite.moodsampler.data.CategoryGroup
 import com.russellwhite.moodsampler.data.db.ActivityGroup
@@ -118,6 +119,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
         TimeZoneCard()
 
         LocationCard(enabled = settings.autoLocation, onToggle = viewModel::setAutoLocation)
+        CompanyScanCard(enabled = settings.autoCompany, onToggle = viewModel::setAutoCompany)
 
         CategoryEditorCard("Activities", CategoryType.ACTIVITY, categoryGroups, usage, viewModel)
         CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
@@ -280,6 +282,36 @@ private fun LocationCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                 )
                 OutlinedButton(onClick = permission.request) { Text("Allow location") }
+            }
+        }
+    }
+}
+
+/** Opt-in nearby-device scan per answer for company suggestions, plus the permission it needs. */
+@Composable
+private fun CompanyScanCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val permission = rememberBluetoothPermission()
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Suggest company from nearby devices", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Switch(checked = enabled, onCheckedChange = onToggle)
+            }
+            Text(
+                "A few-second Bluetooth scan per answer, only while the capture screen is open. " +
+                    "Devices that keep showing up when you pick the same company (a partner's watch, " +
+                    "a friend's earbuds, the family car) pre-select it next time. Only scrambled device " +
+                    "IDs are stored, never names or addresses, and they're left out of the CSV.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (enabled && !permission.granted) {
+                Text(
+                    "Nearby-devices permission is off, so nothing is scanned.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedButton(onClick = permission.request) { Text("Allow nearby devices") }
             }
         }
     }

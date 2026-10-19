@@ -7,6 +7,7 @@ import com.russellwhite.moodsampler.data.backup.BackupFormatException
 import com.russellwhite.moodsampler.data.backup.CategoryDto
 import com.russellwhite.moodsampler.data.backup.PromptDto
 import com.russellwhite.moodsampler.data.backup.SampleActivityDto
+import com.russellwhite.moodsampler.data.backup.SampleDeviceDto
 import com.russellwhite.moodsampler.data.backup.SampleDto
 import com.russellwhite.moodsampler.data.backup.SettingsDto
 import com.russellwhite.moodsampler.data.backup.toEntity
@@ -20,11 +21,12 @@ class BackupCodecTest {
         schemaVersion = AppDatabase.VERSION,
         appVersionName = "1.1",
         exportedAtEpochMs = 1_700_000_000_000,
-        settings = SettingsDto(6, 540, 1320, 20),
+        settings = SettingsDto(6, 540, 1320, 20, autoCompany = false, deviceSalt = "salt"),
         categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"), CategoryDto(2, "LOCATION", "Home", 1, true)),
         prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
         samples = listOf(SampleDto(3, 7, 7f, 4f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000)),
         sampleActivities = listOf(SampleActivityDto(3, 1)),
+        sampleDevices = listOf(SampleDeviceDto(3, "0123456789abcdef")),
     )
 
     @Test
@@ -50,6 +52,9 @@ class BackupCodecTest {
             "sampleActivities":[]}"""
         val decoded = BackupCodec.decode(text)
         assertThat(decoded.settings.autoLocation).isTrue()
+        assertThat(decoded.settings.autoCompany).isTrue()
+        assertThat(decoded.settings.deviceSalt).isNull()
+        assertThat(decoded.sampleDevices).isEmpty()
         assertThat(decoded.categories.single().group).isNull()
         assertThat(decoded.categories.single().toEntity().group).isEqualTo("WORK")
         assertThat(decoded.samples.single().latitude).isNull()

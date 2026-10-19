@@ -36,11 +36,12 @@ class BackupManager(
         schemaVersion = AppDatabase.VERSION,
         appVersionName = appVersionName,
         exportedAtEpochMs = clock.millis(),
-        settings = settings.current().toDto(),
+        settings = settings.current().toDto(settings.deviceSaltOrNull()),
         categories = db.categoryDao().getAll().map { it.toDto() },
         prompts = db.scheduledPromptDao().getAll().map { it.toDto() },
         samples = db.sampleDao().getAll().map { it.toDto() },
         sampleActivities = db.sampleDao().getAllActivities().map { it.toDto() },
+        sampleDevices = db.sampleDao().getAllDevices().map { it.toDto() },
     )
 
     /** Parse and validate without touching the database. */
@@ -58,6 +59,7 @@ class BackupManager(
     suspend fun deleteSamplesAndPrompts() {
         db.withTransaction {
             db.sampleDao().deleteAllActivities()
+            db.sampleDao().deleteAllDevices()
             db.sampleDao().deleteAll()
             db.scheduledPromptDao().deleteAll()
         }
@@ -73,12 +75,13 @@ class BackupManager(
 
     /**
      * Replace all local data with [backup]. Rows are inserted with their original
-     * ids inside one transaction (FK order: categories, prompts, samples, tags).
+     * ids inside one transaction (FK order: categories, prompts, samples, tags, devices).
      * Afterwards the schedule is rebuilt for the current phone/zone/settings.
      */
     suspend fun apply(backup: Backup) {
         db.withTransaction {
             db.sampleDao().deleteAllActivities()
+            db.sampleDao().deleteAllDevices()
             db.sampleDao().deleteAll()
             db.scheduledPromptDao().deleteAll()
             db.categoryDao().deleteAll()
@@ -86,6 +89,7 @@ class BackupManager(
             db.scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
             db.sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
             db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
+            db.sampleDao().insertDevices(backup.sampleDevices.map { it.toEntity() })
         }
         photos.retainOnly(backup.samples.mapNotNull { it.photoPath })
         settings.replaceAll(backup.settings)

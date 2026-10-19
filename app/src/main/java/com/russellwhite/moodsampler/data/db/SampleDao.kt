@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 /** A past answer's coordinates and the place the user picked — the training set for place suggestions. */
 data class GeoTag(val locationId: Long, val latitude: Double, val longitude: Double)
 
+/** One device seen with a past answer that named its company — the training set for company suggestions. */
+data class DeviceTag(val sampleId: Long, val socialId: Long, val deviceHash: String)
+
 /** How many samples reference a category (activities via the join table, place/company directly). */
 data class CategoryUsage(val categoryId: Long, val n: Int)
 
@@ -69,6 +72,25 @@ interface SampleDao {
            ORDER BY id DESC LIMIT :limit"""
     )
     suspend fun recentGeoTags(limit: Int = 500): List<GeoTag>
+
+    /** Devices of the most recent [limit] answers that carry both a company and at least one device. */
+    @Query(
+        """SELECT d.sampleId, s.socialId, d.deviceHash FROM sample_device d JOIN sample s ON s.id = d.sampleId
+           WHERE d.sampleId IN (
+               SELECT d2.sampleId FROM sample_device d2 JOIN sample s2 ON s2.id = d2.sampleId
+               WHERE s2.socialId IS NOT NULL GROUP BY d2.sampleId ORDER BY d2.sampleId DESC LIMIT :limit
+           )"""
+    )
+    suspend fun recentDeviceTags(limit: Int = 500): List<DeviceTag>
+
+    @Query("SELECT * FROM sample_device ORDER BY sampleId, deviceHash")
+    suspend fun getAllDevices(): List<SampleDeviceEntity>
+
+    @Insert
+    suspend fun insertDevices(rows: List<SampleDeviceEntity>)
+
+    @Query("DELETE FROM sample_device")
+    suspend fun deleteAllDevices()
 
     @Query("DELETE FROM sample_activity")
     suspend fun deleteAllActivities()

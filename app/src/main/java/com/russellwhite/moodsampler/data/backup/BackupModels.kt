@@ -7,6 +7,7 @@ import com.russellwhite.moodsampler.data.db.CategoryType
 import com.russellwhite.moodsampler.data.db.DefaultCategories
 import com.russellwhite.moodsampler.data.db.PromptStatus
 import com.russellwhite.moodsampler.data.db.SampleActivityCrossRef
+import com.russellwhite.moodsampler.data.db.SampleDeviceEntity
 import com.russellwhite.moodsampler.data.db.SampleEntity
 import com.russellwhite.moodsampler.data.db.ScheduledPromptEntity
 import com.russellwhite.moodsampler.data.settings.AppSettings
@@ -33,6 +34,8 @@ data class Backup(
     val prompts: List<PromptDto>,
     val samples: List<SampleDto>,
     val sampleActivities: List<SampleActivityDto>,
+    /** Hashed nearby devices per sample (schema v8); absent in older backups. */
+    val sampleDevices: List<SampleDeviceDto> = emptyList(),
 ) {
     companion object {
         const val FORMAT = 1
@@ -46,6 +49,9 @@ data class SettingsDto(
     val dayEndMinutes: Int,
     val expiryMinutes: Int,
     val autoLocation: Boolean = true,
+    val autoCompany: Boolean = true,
+    /** Salt behind [SampleDeviceDto.deviceHash] (schema v8); null when nothing was ever scanned. */
+    val deviceSalt: String? = null,
 )
 
 @Serializable
@@ -100,6 +106,9 @@ data class SampleDto(
 @Serializable
 data class SampleActivityDto(val sampleId: Long, val categoryId: Long)
 
+@Serializable
+data class SampleDeviceDto(val sampleId: Long, val deviceHash: String)
+
 class BackupFormatException(message: String) : Exception(message)
 
 /** Pure encode/decode (unit-tested); validation lives here so the UI just reports messages. */
@@ -131,7 +140,8 @@ object BackupCodec {
 
 // ---- Entity <-> DTO mapping ----
 
-fun AppSettings.toDto() = SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation)
+fun AppSettings.toDto(deviceSalt: String? = null) =
+    SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation, autoCompany, deviceSalt)
 
 fun CategoryEntity.toDto() = CategoryDto(id, type.name, label, sortOrder, isArchived, group)
 /** [schemaVersion] is the backup's: pre-v7 files still carry an active "Other" activity. */
@@ -171,3 +181,6 @@ fun SampleDto.toEntity(schemaVersion: Int): SampleEntity {
 
 fun SampleActivityCrossRef.toDto() = SampleActivityDto(sampleId, categoryId)
 fun SampleActivityDto.toEntity() = SampleActivityCrossRef(sampleId, categoryId)
+
+fun SampleDeviceEntity.toDto() = SampleDeviceDto(sampleId, deviceHash)
+fun SampleDeviceDto.toEntity() = SampleDeviceEntity(sampleId, deviceHash)

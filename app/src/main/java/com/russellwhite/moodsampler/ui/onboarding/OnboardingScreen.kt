@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.russellwhite.moodsampler.ui.rememberBluetoothPermission
 import com.russellwhite.moodsampler.ui.rememberLocationPermission
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.ui.settings.SamplingControls
@@ -148,6 +149,7 @@ private fun PermissionsPage() {
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
     var exactOn by remember { mutableStateOf(alarmManager.canScheduleExactAlarms()) }
     val location = rememberLocationPermission()
+    val bluetooth = rememberBluetoothPermission()
     LifecycleResumeEffect(Unit) {
         notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
         exactOn = alarmManager.canScheduleExactAlarms()
@@ -195,6 +197,15 @@ private fun PermissionsPage() {
             "no background tracking. You can change this later in Settings.",
         actionLabel = "Allow location",
         onRequest = location.request,
+    )
+    PermissionCard(
+        title = "Nearby devices (optional)",
+        granted = bluetooth.granted,
+        grantedText = "On — each answer notes which Bluetooth devices are around and learns who you're usually with.",
+        missingText = "Off — you'll pick your company by hand. A few-second scan per answer, only while " +
+            "answering; only scrambled device IDs are kept. You can change this later in Settings.",
+        actionLabel = "Allow nearby devices",
+        onRequest = bluetooth.request,
     )
 }
 

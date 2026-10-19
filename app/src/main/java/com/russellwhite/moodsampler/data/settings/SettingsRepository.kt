@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.russellwhite.moodsampler.data.backup.SettingsDto
 import com.russellwhite.moodsampler.scheduling.SamplingConfig
 import java.time.LocalTime
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,6 +26,8 @@ data class AppSettings(
     val onboardingDone: Boolean = false,
     /** Take one location fix while answering a prompt (needs the location permission). */
     val autoLocation: Boolean = true,
+    /** Scan for nearby Bluetooth devices while answering to suggest company (needs the nearby-devices permission). */
+    val autoCompany: Boolean = true,
 ) {
     fun toSamplingConfig() = SamplingConfig(
         dayStart = LocalTime.ofSecondOfDay(dayStartMinutes * 60L),
@@ -44,6 +47,8 @@ class SettingsRepository(private val context: Context) {
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         val SCHEDULE_ZONE_ID = stringPreferencesKey("schedule_zone_id")
         val AUTO_LOCATION = booleanPreferencesKey("auto_location")
+        val AUTO_COMPANY = booleanPreferencesKey("auto_company")
+        val DEVICE_SALT = stringPreferencesKey("device_salt")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -55,6 +60,7 @@ class SettingsRepository(private val context: Context) {
             expiryMinutes = prefs[Keys.EXPIRY_MINUTES] ?: defaults.expiryMinutes,
             onboardingDone = prefs[Keys.ONBOARDING_DONE] ?: defaults.onboardingDone,
             autoLocation = prefs[Keys.AUTO_LOCATION] ?: defaults.autoLocation,
+            autoCompany = prefs[Keys.AUTO_COMPANY] ?: defaults.autoCompany,
         )
     }
 
@@ -75,6 +81,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAutoLocation(enabled: Boolean) =
         context.dataStore.edit { it[Keys.AUTO_LOCATION] = enabled }
 
+    suspend fun setAutoCompany(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.AUTO_COMPANY] = enabled }
+
     suspend fun setOnboardingDone() =
         context.dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
 
@@ -86,7 +95,23 @@ class SettingsRepository(private val context: Context) {
             it[Keys.DAY_END_MINUTES] = dto.dayEndMinutes.coerceIn(0, 24 * 60 - 1)
             it[Keys.EXPIRY_MINUTES] = dto.expiryMinutes.coerceIn(5, 120)
             it[Keys.AUTO_LOCATION] = dto.autoLocation
+            it[Keys.AUTO_COMPANY] = dto.autoCompany
+            // Restored device hashes only match future scans under the salt they were made with.
+            dto.deviceSalt?.let { salt -> it[Keys.DEVICE_SALT] = salt }
         }
+
+    /** Salt for hashing nearby devices, or null if no scan has ever needed one. */
+    suspend fun deviceSaltOrNull(): String? = context.dataStore.data.first()[Keys.DEVICE_SALT]
+
+    /** Salt for hashing nearby devices; created on first use and kept for the life of the install. */
+    suspend fun deviceSalt(): String {
+        deviceSaltOrNull()?.let { return it }
+        var salt = ""
+        context.dataStore.edit { prefs ->
+            salt = prefs[Keys.DEVICE_SALT] ?: UUID.randomUUID().toString().also { prefs[Keys.DEVICE_SALT] = it }
+        }
+        return salt
+    }
 
     /**
      * Zone ID the upcoming schedule was generated in, or null before the first

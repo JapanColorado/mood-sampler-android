@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.russellwhite.moodsampler.ui.capture.CaptureForm
+import com.russellwhite.moodsampler.ui.capture.CompanyStatus
 import com.russellwhite.moodsampler.ui.capture.LocationStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,6 +77,8 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                     usage = usage,
                     locationStatus = LocationStatus.Off,
                     suggestedLocationId = null,
+                    companyStatus = CompanyStatus.Off,
+                    suggestedSocialId = null,
                     saveLabel = "Update",
                     onSave = viewModel::save,
                     onAddOption = viewModel::addOption,

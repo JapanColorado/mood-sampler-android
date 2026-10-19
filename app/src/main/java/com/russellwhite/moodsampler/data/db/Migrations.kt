@@ -200,6 +200,22 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+/**
+ * v7 → v8: new `sample_device` table — hashed Bluetooth devices seen nearby while
+ * answering, which train company suggestions. Existing samples simply have none.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sample_device` (
+               `sampleId` INTEGER NOT NULL,
+               `deviceHash` TEXT NOT NULL,
+               PRIMARY KEY(`sampleId`, `deviceHash`),
+               FOREIGN KEY(`sampleId`) REFERENCES `sample`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+        )
+    }
+}
+
 private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
     db.execSQL(
         """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)

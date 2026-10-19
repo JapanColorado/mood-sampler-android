@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,8 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -122,6 +119,9 @@ internal fun CaptureForm(
     locationStatus: LocationStatus,
     /** Place matched from the fix; preselected until the user touches the place row. */
     suggestedLocationId: Long?,
+    companyStatus: CompanyStatus,
+    /** Company matched from nearby devices; preselected until the user touches the company row. */
+    suggestedSocialId: Long?,
     saveLabel: String,
     onSave: (CaptureFormValues) -> Unit,
     /** Adds (or matches) an option typed into an "Other…" chip; its id, or null if nothing was added. */
@@ -144,6 +144,7 @@ internal fun CaptureForm(
     val photoStore = LocalContext.current.appGraph.photoStore
     var showSkip by rememberSaveable { mutableStateOf(false) }
     var placeTouched by rememberSaveable { mutableStateOf(false) }
+    var companyTouched by rememberSaveable { mutableStateOf(false) }
     var addingType by rememberSaveable { mutableStateOf<CategoryType?>(null) }
     val scope = rememberCoroutineScope()
     val ready = valence != UNPICKED && arousal != UNPICKED
@@ -151,6 +152,10 @@ internal fun CaptureForm(
     // The fix may land after the form is on screen; only fill an untouched, empty place.
     LaunchedEffect(suggestedLocationId) {
         if (suggestedLocationId != null && !placeTouched && locationId == null) locationId = suggestedLocationId
+    }
+    // Same for company once the nearby-device scan finishes.
+    LaunchedEffect(suggestedSocialId) {
+        if (suggestedSocialId != null && !companyTouched && socialId == null) socialId = suggestedSocialId
     }
 
     val takePhoto = rememberPhotoCapture { uri ->
@@ -219,7 +224,8 @@ internal fun CaptureForm(
             ActivitySection(activities, usage, activityIds, onOther = { addingType = CategoryType.ACTIVITY }) { id ->
                 if (!activityIds.remove(id)) activityIds.add(id)
             }
-            CompanySection(socials, socialId, onOther = { addingType = CategoryType.SOCIAL }) {
+            CompanySection(socials, socialId, companyStatus, onOther = { addingType = CategoryType.SOCIAL }) {
+                companyTouched = true
                 socialId = if (socialId == it) null else it
             }
 
@@ -272,7 +278,7 @@ internal fun CaptureForm(
                 when (type) {
                     CategoryType.LOCATION -> { placeTouched = true; locationId = id }
                     CategoryType.ACTIVITY -> if (id !in activityIds) activityIds.add(id)
-                    CategoryType.SOCIAL -> socialId = id
+                    CategoryType.SOCIAL -> { companyTouched = true; socialId = id }
                 }
             }
         }
@@ -480,54 +486,34 @@ private fun ActivitySection(
     }
 }
 
-/** Who you're with, collapsed to one summary line until tapped; picking closes it again. */
+/** Who you're with: every option shown (the list is short), plus the scan's caption. */
 @Composable
 private fun CompanySection(
     options: List<CategoryEntity>,
     selectedId: Long?,
+    status: CompanyStatus,
     onOther: () -> Unit,
     onSelect: (Long) -> Unit,
 ) {
-    var open by rememberSaveable { mutableStateOf(false) }
-    val selected = options.firstOrNull { it.id == selectedId }
-    Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable { open = !open }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.Group, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(8.dp))
-            Text("With", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                selected?.label ?: "—",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (selected != null) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                contentDescription = if (open) "Hide" else "Choose who you're with",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (open) {
-            ChipFlow {
-                options.forEach { option ->
-                    FilterChip(
-                        selected = option.id == selectedId,
-                        onClick = { onSelect(option.id); open = false },
-                        label = { Text(option.label) },
-                    )
-                }
-                OtherChip { onOther(); open = false }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel(Icons.Outlined.Group, "With", companyCaption(status))
+        ChipFlow {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option.id == selectedId,
+                    onClick = { onSelect(option.id) },
+                    label = { Text(option.label) },
+                )
             }
+            OtherChip(onOther)
         }
     }
+}
+
+private fun companyCaption(status: CompanyStatus): String? = when (status) {
+    CompanyStatus.Off, CompanyStatus.Scanned -> null
+    CompanyStatus.Scanning -> "checking nearby devices…"
+    CompanyStatus.Unavailable -> "Bluetooth off"
 }
 
 /** "+ Note" and "Photo" chips; each disappears once its field is showing. */

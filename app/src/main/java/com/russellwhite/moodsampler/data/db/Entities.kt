@@ -104,6 +104,28 @@ data class SampleActivityCrossRef(
     val categoryId: Long,
 )
 
+/**
+ * A Bluetooth device advertising nearby while the sample was answered (schema v8).
+ * Only a salted hash is kept (see [com.russellwhite.moodsampler.data.bluetooth.DeviceFingerprint]),
+ * never the raw address or name. Training data for company suggestions.
+ */
+@Entity(
+    tableName = "sample_device",
+    primaryKeys = ["sampleId", "deviceHash"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SampleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sampleId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class SampleDeviceEntity(
+    val sampleId: Long,
+    val deviceHash: String,
+)
+
 @Entity(tableName = "category", indices = [Index("type")])
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

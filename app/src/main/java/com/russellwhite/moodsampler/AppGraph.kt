@@ -6,6 +6,7 @@ import com.russellwhite.moodsampler.data.CsvExporter
 import com.russellwhite.moodsampler.data.PhotoStore
 import com.russellwhite.moodsampler.data.SampleRepository
 import com.russellwhite.moodsampler.data.backup.BackupManager
+import com.russellwhite.moodsampler.data.bluetooth.BluetoothScanner
 import com.russellwhite.moodsampler.data.db.AppDatabase
 import com.russellwhite.moodsampler.data.location.LocationProvider
 import com.russellwhite.moodsampler.data.settings.OnboardingGate
@@ -24,6 +25,7 @@ class AppGraph(context: Context) {
     val categoryRepository = CategoryRepository(database)
     val csvExporter = CsvExporter(context, database)
     val locationProvider = LocationProvider(context)
+    val bluetoothScanner = BluetoothScanner(context)
     val promptNotifier = PromptNotifier(context)
     val onboardingGate = OnboardingGate(database, settingsRepository)
     val promptScheduler = PromptScheduler(

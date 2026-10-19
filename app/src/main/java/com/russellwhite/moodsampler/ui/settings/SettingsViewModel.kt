@@ -62,6 +62,10 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setAutoLocation(enabled) }
     }
 
+    fun setAutoCompany(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoCompany(enabled) }
+    }
+
     fun setExpiryMinutes(value: Int) {
         viewModelScope.launch { settingsRepository.setExpiryMinutes(value) }
     }
