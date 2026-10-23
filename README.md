@@ -4,7 +4,10 @@ Android app for mood/time tracking via **random experience sampling** (ESM).
 The phone prompts you at random moments during waking hours; each prompt is a
 ~15-second capture (0–10 valence + energy taps, a 0–10 physical-pain rating,
 what/where/with-whom quick-picks — several activities at once, grouped under
-headers for fast scanning — and an optional note). Optionally, each answer
+headers for fast scanning — and a narration typed or dictated in your own
+words, plus an optional photo). With a Claude API key, one tap turns the narration
+and photo into the place, activities, company and pain types, plus a summary
+and tags, for you to check before saving. Optionally, each answer
 records one location fix and pre-selects your place from where you answered
 before, and a short Bluetooth scan pre-selects who you're with from the devices
 that were around last time. Over weeks this builds a statistically representative picture of your
@@ -29,10 +32,26 @@ mood and time use — unlike diaries, which oversample memorable moments.
 - Follows the phone's time zone: day start/end are local times, and the
   upcoming schedule is redrawn automatically when the zone changes (travel)
 - The UI never reveals upcoming prompt times — anticipation biases sampling
+- Narrate first: the capture screen opens with a narration box (with an
+  in-app mic that streams the platform speech recognizer's words into it) and
+  the photo. **Fill in with Claude** sends the narration, photo, local time and
+  your option lists to the Anthropic API with your own key (Settings → *Fill in
+  with Claude*: key plus a model picker, Opus 5.5 by default, Sonnet 5.5 or
+  Haiku 5.5). Claude picks place, activities, company and pain types from your
+  options, adding a new option only when nothing fits (at most a couple per
+  answer), and writes a one-line summary and up to 5 free-form tags. Valence,
+  energy and the pain number always stay your own taps. The context chips live
+  in a collapsible **Manual** section that shows what's picked at a glance and
+  opens after Claude fills it, so you can check before Save. The key is kept on
+  the phone only: out of the JSON backup and Android's cloud backup / device
+  transfer. Without a key the form works as before, with Manual open
+- Pain types (Headache, Back, Joint, …) appear under the pain scale once pain
+  is above 0; multi-select, editable in Settings like the other lists
 - Insights dashboard: mood and pain over time, valence by pain level, and a
   valence / energy / pain toggle for the time-of-day and
   activity/place/company breakdowns
-- History tab: every prompt by day, note/tag search, edit or delete an answer
+- History tab: every prompt by day (Claude's summary in place of the narration
+  when there is one), search over notes, summaries, options and tags, edit or delete an answer
   (deleting marks the prompt CANCELLED — excluded from response rate, not missed)
 - Optional automatic location: with the location permission granted and the
   Settings switch on, the capture screen takes **one foreground fix** while it
@@ -59,9 +78,9 @@ mood and time use — unlike diaries, which oversample memorable moments.
   media, Health & body, Getting around, Rest, Other) both on the capture screen
   and in Settings; each activity's group is editable, user-added ones start in
   Other
-- Editable activity/place/company lists: rename, regroup, reorder, archive and
-  restore, with per-item usage counts; 28 default activities and 16 default
-  places
+- Editable activity/place/company/pain-type lists: rename, regroup, reorder, archive and
+  restore, with per-item usage counts; 28 default activities, 16 default
+  places and 12 default pain types
 - CSV export via the share sheet; full JSON backup and restore; "Delete all
   data" (answers and prompts only — categories and settings stay) behind a
   confirmation that states the counts
@@ -113,7 +132,7 @@ collides with a release install.
 7. Home → **Debug: seed 30 days of fake data** → Insights shows all charts,
    including "Pain over time" and "Valence by pain level"; toggle the
    breakdown between Valence / Energy / Pain.
-   Settings → Export CSV → share to yourself and eyeball the 16 columns.
+   Settings → Export CSV → share to yourself and eyeball the 19 columns.
 8. Settings → change prompts/day → `pixi run alarms` shows a re-armed schedule.
 9. Fire a test prompt → the notification offers **Skip** and **Remind me in
    5 min**; snooze → `pixi run alarms` shows the re-show alarm next to the
@@ -152,10 +171,23 @@ collides with a release install.
     the same company, plus a couple with a different company away from it →
     the next prompt near that device pre-selects that company. With Bluetooth off the caption
     says "Bluetooth off" and nothing is pre-selected.
+19. With no Claude key, fire a test prompt → the Manual section is open and a
+    caption points to Settings; the form saves as before. Settings → *Fill in
+    with Claude* → paste a key → "API key saved (…abcd)"; pick Haiku 5.5.
+20. Fire a test prompt → Manual is collapsed → tap the mic, allow the
+    microphone, say "Reading on the couch at home with my partner, bit of a
+    headache, worried about tomorrow's deadline" → the words stream into the box.
+    Add a photo, tap **Fill in with Claude** → a spinner, then a summary and
+    tags appear, Manual opens with Home / Reading / Partner picked, and pain
+    types show Headache. Remove a tag, tap valence and energy, Save → History
+    shows the summary and `#tags`; CSV `pain_types`, `summary`, `tags` are filled.
+21. Pick a place by hand, then **Fill in again** → your place stays. Airplane
+    mode → **Fill in with Claude** → "Couldn't reach Claude…"; the form still
+    saves. Settings → Remove the key → next prompt is back to manual.
 
 ## Data
 
-Room DB `moodsampler.db`, schema v8 (`app/schemas/` holds the exported JSON
+Room DB `moodsampler.db`, schema v9 (`app/schemas/` holds the exported JSON
 for every version; migrations are explicit — there is no destructive fallback):
 
 - `scheduled_prompt` — one row per scheduled prompt, status PENDING → NOTIFIED →
@@ -163,31 +195,39 @@ for every version; migrations are explicit — there is no destructive fallback)
   answer). `skipReason` is set when a MISSED prompt was declined on purpose.
 - `sample` — the answers: `valence` and `arousal` (energy) as integers 0–10
   (v6; v5 used 1–10 and v4 and earlier −1..1 slider values, both converted on migration), `pain` 0–10
-  (null for samples recorded before v2), place and company ids, note, and
+  (null for samples recorded before v2), place and company ids, note (the
+  narration), and
   (v3) `latitude`/`longitude`/`accuracyM`/`fixAtEpochMs` — all null when
   location was off, denied or unavailable. `photoPath` (v4) is the file name
-  of an optional photo in private app storage.
+  of an optional photo in private app storage. `summary` (v9) is Claude's
+  one-line summary, null when Claude wasn't asked.
 - `sample_activity` — many-to-many sample ↔ activity (a sample can tag several).
+- `sample_pain` (v9) — many-to-many sample ↔ pain type (PAIN categories).
+- `sample_tag` (v9) — Claude's free-form tags per sample, lower-case.
 - `sample_device` (v8) — salted hashes of the Bluetooth devices nearby while a
   sample was answered; trains company suggestions. Not in the CSV.
-- `category` — editable activity/place/company lists; archived, never deleted,
+- `category` — editable activity/place/company/pain-type lists; archived, never deleted,
   so history keeps its labels. `groupKey` (v3) is the `ActivityGroup` of an
   activity. The v1→v2 migration back-fills the new default labels for existing
   installs, skipping any the user already has; v2→v3 assigns groups to the
   default activity labels and puts everything else in `OTHER`. v6→v7 archives
   the default "Other" activity (the capture form's "Other…" chip adds a named
   option instead); samples already tagged with it keep it. v7→v8 adds the
-  empty `sample_device` table.
+  empty `sample_device` table. v8→v9 adds `sample.summary`, the empty
+  `sample_pain` and `sample_tag` tables, and the default pain types.
 
 CSV columns: `scheduled_at_iso, answered_at_iso, status, skip_reason, latency_s,
 valence, arousal, pain, activities, location, social, note, latitude,
-longitude, accuracy_m, photo` (`photo` is the stored file name) — missed prompts appear as rows with empty measures;
-several activities are joined with `; `.
+longitude, accuracy_m, photo, pain_types, summary, tags` (`photo` is the stored
+file name) — missed prompts appear as rows with empty measures; several
+activities, pain types or tags are joined with `; `.
 
 JSON backup (`Settings → Back up to file…`) contains every table plus the
 sampling settings (including the auto-location and company-scan switches and
-the device-hash salt, so suggestions keep working after a restore) with ids preserved;
+the device-hash salt, so suggestions keep working after a restore, and the
+Claude model, never the API key) with ids preserved;
 restore replaces all local data and redraws the schedule. Pre-v3 backups
-restore fine: default activities get their groups, coordinates stay empty.
+restore fine: default activities get their groups, coordinates stay empty,
+and pre-v9 backups gain the default pain types.
 Photos are referenced by file name only, so a restore on the same phone keeps
 them; restored elsewhere, those answers have no photo.

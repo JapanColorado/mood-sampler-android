@@ -7,6 +7,8 @@ import dev.russell.moodsampler.data.PhotoStore
 import dev.russell.moodsampler.data.SampleRepository
 import dev.russell.moodsampler.data.backup.BackupManager
 import dev.russell.moodsampler.data.bluetooth.BluetoothScanner
+import dev.russell.moodsampler.data.claude.CaptureAssistant
+import dev.russell.moodsampler.data.claude.ClaudeKeyStore
 import dev.russell.moodsampler.data.db.AppDatabase
 import dev.russell.moodsampler.data.location.LocationProvider
 import dev.russell.moodsampler.data.settings.OnboardingGate
@@ -23,6 +25,14 @@ class AppGraph(context: Context) {
     val photoStore = PhotoStore(context)
     val sampleRepository = SampleRepository(database, photoStore)
     val categoryRepository = CategoryRepository(database)
+    val claudeKeyStore = ClaudeKeyStore(context)
+    val captureAssistant = CaptureAssistant(
+        db = database,
+        categories = categoryRepository,
+        keyStore = claudeKeyStore,
+        settings = settingsRepository,
+        photos = photoStore,
+    )
     val csvExporter = CsvExporter(context, database)
     val locationProvider = LocationProvider(context)
     val bluetoothScanner = BluetoothScanner(context)

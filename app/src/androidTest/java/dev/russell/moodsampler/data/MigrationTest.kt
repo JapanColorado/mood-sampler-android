@@ -14,6 +14,7 @@ import dev.russell.moodsampler.data.db.MIGRATION_4_6
 import dev.russell.moodsampler.data.db.MIGRATION_5_6
 import dev.russell.moodsampler.data.db.MIGRATION_6_7
 import dev.russell.moodsampler.data.db.MIGRATION_7_8
+import dev.russell.moodsampler.data.db.MIGRATION_8_9
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -263,6 +264,41 @@ class MigrationTest {
         db.execSQL("INSERT INTO sample_device (sampleId, deviceHash) VALUES (1, 'abc')")
         db.execSQL("DELETE FROM sample WHERE id = 1")
         db.query("SELECT COUNT(*) FROM sample_device").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun migrate8To9_addsSummaryPainAndTagTablesAndDefaultPainTypes() {
+        helper.createDatabase(DB, 8).apply {
+            // A user-made category that collides case-insensitively with a new default — but of another type.
+            insertCategory("ACTIVITY", "headache", 1)
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status)
+                   VALUES (1, 1, '2026-10-22', 0, 'ANSWERED')"""
+            )
+            execSQL("INSERT INTO sample (id, promptId, valence, arousal, pain, note, createdAtEpochMs) VALUES (1, 1, 5, 5, 3, 'hi', 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 9, true, MIGRATION_8_9)
+
+        db.query("SELECT summary, note, pain FROM sample WHERE id = 1").use { c ->
+            c.moveToFirst()
+            assertThat(c.isNull(0)).isTrue()
+            assertThat(c.getString(1)).isEqualTo("hi")
+            assertThat(c.getInt(2)).isEqualTo(3)
+        }
+        db.query("SELECT label FROM category WHERE type = 'PAIN' ORDER BY sortOrder").use { c ->
+            val labels = buildList { while (c.moveToNext()) add(c.getString(0)) }
+            assertThat(labels).containsExactlyElementsIn(DefaultCategories.PAIN_TYPES).inOrder()
+        }
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL("INSERT INTO sample_pain (sampleId, categoryId) SELECT 1, id FROM category WHERE type = 'PAIN' AND label = 'Headache'")
+        db.execSQL("INSERT INTO sample_tag (sampleId, tag) VALUES (1, 'deadline')")
+        db.execSQL("DELETE FROM sample WHERE id = 1")
+        db.query("SELECT (SELECT COUNT(*) FROM sample_pain) + (SELECT COUNT(*) FROM sample_tag)").use { c ->
             c.moveToFirst()
             assertThat(c.getInt(0)).isEqualTo(0)
         }

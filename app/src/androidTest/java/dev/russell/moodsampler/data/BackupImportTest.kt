@@ -9,14 +9,16 @@ import dev.russell.moodsampler.data.backup.CategoryDto
 import dev.russell.moodsampler.data.backup.PromptDto
 import dev.russell.moodsampler.data.backup.SampleActivityDto
 import dev.russell.moodsampler.data.backup.SampleDto
+import dev.russell.moodsampler.data.backup.SamplePainDto
+import dev.russell.moodsampler.data.backup.SampleTagDto
 import dev.russell.moodsampler.data.backup.SettingsDto
-import dev.russell.moodsampler.data.backup.toEntity
+import dev.russell.moodsampler.data.backup.replaceTables
 import dev.russell.moodsampler.data.db.AppDatabase
 import dev.russell.moodsampler.data.db.CategoryEntity
 import dev.russell.moodsampler.data.db.CategoryType
+import dev.russell.moodsampler.data.db.DefaultCategories
 import dev.russell.moodsampler.data.db.PromptStatus
 import dev.russell.moodsampler.data.db.ScheduledPromptEntity
-import androidx.room.withTransaction
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -24,8 +26,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Exercises the table-replacement half of BackupManager.apply (the part that
- * needs a real SQLite) without AlarmManager/DataStore.
+ * Exercises the table-replacement half of BackupManager.apply ([replaceTables], the
+ * part that needs a real SQLite) without AlarmManager/DataStore.
  */
 @RunWith(AndroidJUnit4::class)
 class BackupImportTest {
@@ -51,28 +53,46 @@ class BackupImportTest {
         val backup = Backup(
             schemaVersion = AppDatabase.VERSION, appVersionName = "t", exportedAtEpochMs = 0,
             settings = SettingsDto(6, 540, 1320, 20),
-            categories = listOf(CategoryDto(41, "ACTIVITY", "Work", 1, false), CategoryDto(42, "ACTIVITY", "Music", 2, false)),
+            categories = listOf(
+                CategoryDto(41, "ACTIVITY", "Work", 1, false),
+                CategoryDto(42, "ACTIVITY", "Music", 2, false),
+                CategoryDto(43, "PAIN", "Headache", 1, false),
+            ),
             prompts = listOf(PromptDto(900, 5_000, "2026-08-15", 0, "ANSWERED", 5_000, 5_100)),
             samples = listOf(SampleDto(77, 900, 7f, 4f, 2, null, null, "hi", 5_100)),
             sampleActivities = listOf(SampleActivityDto(77, 41), SampleActivityDto(77, 42)),
+            samplePainTypes = listOf(SamplePainDto(77, 43)),
+            sampleTags = listOf(SampleTagDto(77, "deadline")),
         )
 
-        db.withTransaction {
-            db.sampleDao().deleteAllActivities()
-            db.sampleDao().deleteAll()
-            db.scheduledPromptDao().deleteAll()
-            db.categoryDao().deleteAll()
-            db.categoryDao().insertAll(backup.categories.map { it.toEntity() })
-            db.scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
-            db.sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
-            db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
-        }
+        db.replaceTables(backup)
 
-        assertThat(db.categoryDao().getAll().map { it.id to it.label }).containsExactly(41L to "Work", 42L to "Music")
+        assertThat(db.categoryDao().getAll().map { it.id to it.label })
+            .containsExactly(41L to "Work", 42L to "Music", 43L to "Headache")
         assertThat(db.scheduledPromptDao().getAll().map { it.id }).containsExactly(900L)
         val restored = db.sampleDao().byPromptId(900)!!
         assertThat(restored.sample.id).isEqualTo(77)
         assertThat(restored.sample.pain).isEqualTo(2)
         assertThat(restored.activityIds).containsExactly(41L, 42L)
+        assertThat(restored.painTypeIds).containsExactly(43L)
+        assertThat(restored.tags).containsExactly("deadline")
+    }
+
+    @Test
+    fun replaceTables_preV9BackupGainsDefaultPainTypes() = runTest {
+        val backup = Backup(
+            schemaVersion = 8, appVersionName = "t", exportedAtEpochMs = 0,
+            settings = SettingsDto(6, 540, 1320, 20),
+            categories = listOf(CategoryDto(41, "ACTIVITY", "Work", 1, false)),
+            prompts = emptyList(),
+            samples = emptyList(),
+            sampleActivities = emptyList(),
+        )
+
+        db.replaceTables(backup)
+
+        val pain = db.categoryDao().byType(CategoryType.PAIN)
+        assertThat(pain.map { it.label }).containsExactlyElementsIn(DefaultCategories.PAIN_TYPES).inOrder()
+        assertThat(pain.none { it.id == 41L }).isTrue()
     }
 }

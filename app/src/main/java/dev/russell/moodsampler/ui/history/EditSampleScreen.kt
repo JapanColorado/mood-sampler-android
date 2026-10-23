@@ -65,20 +65,26 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                 TextButton(onClick = onDone) { Text("Back") }
             }
             is EditUiState.Editing -> {
+                // The form opens its Manual section only when Claude isn't set up; wait to know which.
+                val assistAvailable by viewModel.assistAvailable.collectAsState()
+                val hasAssist = assistAvailable ?: return@Scaffold
                 val activities by viewModel.activities.collectAsState()
                 val locations by viewModel.locations.collectAsState()
                 val socials by viewModel.socials.collectAsState()
+                val painTypes by viewModel.painTypes.collectAsState()
                 val usage by viewModel.usage.collectAsState()
                 CaptureForm(
                     initial = s.initial,
                     activities = activities,
                     locations = locations,
                     socials = socials,
+                    painTypes = painTypes,
                     usage = usage,
                     locationStatus = LocationStatus.Off,
                     suggestedLocationId = null,
                     companyStatus = CompanyStatus.Off,
                     suggestedSocialId = null,
+                    onAssist = if (hasAssist) viewModel::assist else null,
                     saveLabel = "Update",
                     onSave = viewModel::save,
                     onAddOption = viewModel::addOption,

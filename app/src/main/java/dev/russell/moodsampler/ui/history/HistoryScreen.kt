@@ -153,9 +153,10 @@ private fun AnsweredSummary(row: HistoryRow) {
             overflow = TextOverflow.Ellipsis,
         )
     }
-    row.note?.let { note ->
+    // Claude's summary reads better in a list than the raw narration; fall back to the note.
+    (row.summary ?: row.note)?.let { text ->
         Text(
-            note,
+            text,
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,

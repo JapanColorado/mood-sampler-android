@@ -1,5 +1,7 @@
 package dev.russell.moodsampler.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -8,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.russell.moodsampler.appGraph
 import dev.russell.moodsampler.data.bluetooth.BluetoothScanner
@@ -27,6 +30,15 @@ fun rememberLocationPermission(): PermissionState {
 fun rememberBluetoothPermission(): PermissionState {
     val scanner = LocalContext.current.appGraph.bluetoothScanner
     return rememberPermission(BluetoothScanner.PERMISSIONS, scanner::hasPermission)
+}
+
+/** Microphone (RECORD_AUDIO), for dictating a capture's narration. */
+@Composable
+fun rememberMicrophonePermission(): PermissionState {
+    val context = LocalContext.current
+    return rememberPermission(arrayOf(Manifest.permission.RECORD_AUDIO)) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
 }
 
 /**

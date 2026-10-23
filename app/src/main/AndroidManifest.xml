@@ -17,8 +17,20 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <!-- Optional: "Fill in with Claude" sends the narration (and photo) to the Anthropic API, only on tap. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Optional: dictating the narration through the platform speech recognizer. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <!-- Optional photo per answer via the system camera app; no CAMERA permission needed. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!-- Lets SpeechRecognizer find the phone's recognition service (package visibility, API 30+). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".MoodSamplerApp"
@@ -26,6 +38,7 @@
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.MoodSampler"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true">
 
         <activity

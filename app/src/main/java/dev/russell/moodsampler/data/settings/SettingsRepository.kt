@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.russell.moodsampler.data.backup.SettingsDto
+import dev.russell.moodsampler.data.claude.ClaudeModel
 import dev.russell.moodsampler.scheduling.SamplingConfig
 import java.time.LocalTime
 import java.util.UUID
@@ -28,6 +29,8 @@ data class AppSettings(
     val autoLocation: Boolean = true,
     /** Scan for nearby Bluetooth devices while answering to suggest company (needs the nearby-devices permission). */
     val autoCompany: Boolean = true,
+    /** [ClaudeModel.id] used to fill a capture from the narration. */
+    val claudeModel: String = ClaudeModel.DEFAULT.id,
 ) {
     fun toSamplingConfig() = SamplingConfig(
         dayStart = LocalTime.ofSecondOfDay(dayStartMinutes * 60L),
@@ -49,6 +52,7 @@ class SettingsRepository(private val context: Context) {
         val AUTO_LOCATION = booleanPreferencesKey("auto_location")
         val AUTO_COMPANY = booleanPreferencesKey("auto_company")
         val DEVICE_SALT = stringPreferencesKey("device_salt")
+        val CLAUDE_MODEL = stringPreferencesKey("claude_model")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -61,6 +65,7 @@ class SettingsRepository(private val context: Context) {
             onboardingDone = prefs[Keys.ONBOARDING_DONE] ?: defaults.onboardingDone,
             autoLocation = prefs[Keys.AUTO_LOCATION] ?: defaults.autoLocation,
             autoCompany = prefs[Keys.AUTO_COMPANY] ?: defaults.autoCompany,
+            claudeModel = prefs[Keys.CLAUDE_MODEL] ?: defaults.claudeModel,
         )
     }
 
@@ -84,6 +89,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAutoCompany(enabled: Boolean) =
         context.dataStore.edit { it[Keys.AUTO_COMPANY] = enabled }
 
+    suspend fun setClaudeModel(model: ClaudeModel) =
+        context.dataStore.edit { it[Keys.CLAUDE_MODEL] = model.id }
+
     suspend fun setOnboardingDone() =
         context.dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
 
@@ -98,6 +106,7 @@ class SettingsRepository(private val context: Context) {
             it[Keys.AUTO_COMPANY] = dto.autoCompany
             // Restored device hashes only match future scans under the salt they were made with.
             dto.deviceSalt?.let { salt -> it[Keys.DEVICE_SALT] = salt }
+            dto.claudeModel?.let { id -> it[Keys.CLAUDE_MODEL] = ClaudeModel.parse(id).id }
         }
 
     /** Salt for hashing nearby devices, or null if no scan has ever needed one. */

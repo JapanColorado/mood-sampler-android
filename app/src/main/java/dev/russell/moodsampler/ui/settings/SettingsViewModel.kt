@@ -10,6 +10,8 @@ import dev.russell.moodsampler.data.backup.Backup
 import dev.russell.moodsampler.data.backup.BackupFormatException
 import dev.russell.moodsampler.data.backup.BackupManager
 import dev.russell.moodsampler.data.backup.BackupSummary
+import dev.russell.moodsampler.data.claude.ClaudeKeyStore
+import dev.russell.moodsampler.data.claude.ClaudeModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import dev.russell.moodsampler.data.db.ActivityGroup
 import dev.russell.moodsampler.data.db.CategoryEntity
@@ -20,6 +22,7 @@ import dev.russell.moodsampler.scheduling.PromptScheduler
 import dev.russell.moodsampler.ui.graphViewModelFactory
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -31,6 +34,7 @@ class SettingsViewModel(
     private val scheduler: PromptScheduler,
     private val csvExporter: CsvExporter,
     private val backupManager: BackupManager,
+    private val claudeKeyStore: ClaudeKeyStore,
 ) : ViewModel() {
 
     /** Pending restore awaiting the user's confirmation, or null. */
@@ -64,6 +68,23 @@ class SettingsViewModel(
 
     fun setAutoCompany(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoCompany(enabled) }
+    }
+
+    /** Last four characters of the saved Claude API key, or null when none is saved. */
+    val claudeKeyHint: StateFlow<String?> = claudeKeyStore.apiKey.map { it?.takeLast(4) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setClaudeKey(key: String) {
+        if (key.isBlank()) return
+        viewModelScope.launch { claudeKeyStore.set(key) }
+    }
+
+    fun clearClaudeKey() {
+        viewModelScope.launch { claudeKeyStore.clear() }
+    }
+
+    fun setClaudeModel(model: ClaudeModel) {
+        viewModelScope.launch { settingsRepository.setClaudeModel(model) }
     }
 
     fun setExpiryMinutes(value: Int) {
@@ -185,6 +206,7 @@ class SettingsViewModel(
                 scheduler = graph.promptScheduler,
                 csvExporter = graph.csvExporter,
                 backupManager = graph.backupManager,
+                claudeKeyStore = graph.claudeKeyStore,
             )
         }
     }

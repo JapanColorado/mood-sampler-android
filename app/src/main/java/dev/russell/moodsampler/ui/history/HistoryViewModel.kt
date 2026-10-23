@@ -27,13 +27,18 @@ data class HistoryRow(
     val valence: Int?,
     val arousal: Int?,
     val pain: Int?,
+    val painTypes: List<String>,
     val activities: List<String>,
     val location: String?,
     val social: String?,
     val note: String?,
+    /** Claude's one-line summary, when it filled the answer. */
+    val summary: String?,
+    /** Claude's free-form tags. */
+    val freeTags: List<String>,
     val photoPath: String?,
 ) {
-    val tags: List<String> get() = activities + listOfNotNull(location, social)
+    val tags: List<String> get() = activities + listOfNotNull(location, social) + painTypes + freeTags.map { "#$it" }
 }
 
 data class HistoryDay(val date: LocalDate, val rows: List<HistoryRow>) {
@@ -65,6 +70,7 @@ class HistoryViewModel(
     private fun Pair<LocalDate, HistoryRow>.matches(needle: String): Boolean {
         val row = second
         return row.note?.lowercase()?.contains(needle) == true ||
+            row.summary?.lowercase()?.contains(needle) == true ||
             row.tags.any { it.lowercase().contains(needle) } ||
             (!row.answered && row.missedLabel.lowercase().contains(needle))
     }
@@ -83,10 +89,13 @@ class HistoryViewModel(
             valence = s?.sample?.valence,
             arousal = s?.sample?.arousal,
             pain = s?.sample?.pain,
+            painTypes = s?.painTypeIds?.mapNotNull { labels[it] }.orEmpty(),
             activities = s?.activityIds?.mapNotNull { labels[it] }.orEmpty(),
             location = s?.sample?.locationId?.let { labels[it] },
             social = s?.sample?.socialId?.let { labels[it] },
             note = s?.sample?.note,
+            summary = s?.sample?.summary,
+            freeTags = s?.tags.orEmpty(),
             photoPath = s?.sample?.photoPath,
         )
     }

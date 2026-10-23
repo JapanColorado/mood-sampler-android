@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android backup: everything as before, except the Claude API key (ClaudeKeyStore). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/claude_key.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/claude_key.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

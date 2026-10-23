@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,21 @@ class PhotoStore(private val context: Context) {
         name
     }
 
+    /**
+     * [uri] (a capture or a stored photo) re-encoded as a smaller upright JPEG for
+     * sending to Claude, or null if it can't be read.
+     */
+    suspend fun jpegForUpload(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { decodeScaled(it.readBytes(), UPLOAD_EDGE_PX) }
+                ?: return@runCatching null
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            bitmap.recycle()
+            out.toByteArray()
+        }.getOrNull()
+    }
+
     /** Drop an unsaved capture (the user removed it, or the answer was never saved). */
     fun discardCapture(captureUri: Uri) {
         captureUri.lastPathSegment?.let { File(captureDir, it).delete() }
@@ -68,12 +84,12 @@ class PhotoStore(private val context: Context) {
         Unit
     }
 
-    /** Decode to at most [MAX_EDGE_PX] on the long side and apply the EXIF orientation. */
-    private fun decodeScaled(bytes: ByteArray): Bitmap {
+    /** Decode to at most about [maxEdgePx] on the long side and apply the EXIF orientation. */
+    private fun decodeScaled(bytes: ByteArray, maxEdgePx: Int = MAX_EDGE_PX): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_EDGE_PX) sample *= 2
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxEdgePx) sample *= 2
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
             ?: error("Could not decode the photo.")
         val orientation = bytes.inputStream().use {
@@ -99,6 +115,7 @@ class PhotoStore(private val context: Context) {
         const val CAPTURE_DIR = "photo_captures"
         const val PHOTO_DIR = "photos"
         const val MAX_EDGE_PX = 1600
+        const val UPLOAD_EDGE_PX = 1024
         const val JPEG_QUALITY = 85
         const val STALE_CAPTURE_MS = 24 * 60 * 60 * 1000L
     }

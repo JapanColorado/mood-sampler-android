@@ -35,10 +35,13 @@ class CsvExporter(
     companion object {
         private val ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
-        /** Column order of the export; `activities` joins several labels with "; ". */
+        /**
+         * Column order of the export; `activities`, `pain_types` and `tags` join several values
+         * with "; ". Columns added in later versions go at the end so existing scripts keep working.
+         */
         const val HEADER =
             "scheduled_at_iso,answered_at_iso,status,skip_reason,latency_s,valence,arousal,pain,activities,location,social,note," +
-                "latitude,longitude,accuracy_m,photo"
+                "latitude,longitude,accuracy_m,photo,pain_types,summary,tags"
 
         /**
          * Pure CSV formatting (unit-tested). Missed prompts are included with
@@ -51,6 +54,7 @@ class CsvExporter(
                 val p = row.prompt
                 val s = row.sample?.sample
                 val activityIds = row.sample?.activityIds.orEmpty()
+                val painTypeIds = row.sample?.painTypeIds.orEmpty()
                 val latency = p.answeredAtEpochMs?.let { (it - p.scheduledAtEpochMs) / 1000 }
                 sb.append(
                     listOf(
@@ -70,6 +74,9 @@ class CsvExporter(
                         s?.longitude?.toString() ?: "",
                         s?.accuracyM?.toString() ?: "",
                         s?.photoPath ?: "",
+                        painTypeIds.mapNotNull { labels[it] }.joinToString("; "),
+                        s?.summary ?: "",
+                        row.sample?.tags.orEmpty().joinToString("; "),
                     ).joinToString(",") { quote(it) }
                 )
                 sb.append("\r\n")

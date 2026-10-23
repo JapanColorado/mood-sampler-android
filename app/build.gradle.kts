@@ -87,6 +87,7 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.vico.compose.m3)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.anthropic.java)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

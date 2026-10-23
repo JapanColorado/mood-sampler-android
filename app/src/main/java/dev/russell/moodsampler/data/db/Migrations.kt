@@ -216,6 +216,38 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+/**
+ * v8 → v9, for Claude-assisted capture and pain types:
+ *  - `sample.summary` (nullable) — Claude's one-line summary of the narration;
+ *  - new `sample_pain` join table (sample ↔ PAIN category) and `sample_tag`
+ *    (free-form tags); existing samples have neither;
+ *  - the default pain types added as PAIN categories, skipping any label the
+ *    user somehow already has.
+ * CREATE statements mirror 9.json.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sample` ADD COLUMN `summary` TEXT")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sample_pain` (
+               `sampleId` INTEGER NOT NULL,
+               `categoryId` INTEGER NOT NULL,
+               PRIMARY KEY(`sampleId`, `categoryId`),
+               FOREIGN KEY(`sampleId`) REFERENCES `sample`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE ,
+               FOREIGN KEY(`categoryId`) REFERENCES `category`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_sample_pain_categoryId` ON `sample_pain` (`categoryId`)")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sample_tag` (
+               `sampleId` INTEGER NOT NULL,
+               `tag` TEXT NOT NULL,
+               PRIMARY KEY(`sampleId`, `tag`),
+               FOREIGN KEY(`sampleId`) REFERENCES `sample`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+        )
+        DefaultCategories.PAIN_TYPES.forEach { insertCategoryIfMissing(db, CategoryType.PAIN, it) }
+    }
+}
+
 private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
     db.execSQL(
         """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)

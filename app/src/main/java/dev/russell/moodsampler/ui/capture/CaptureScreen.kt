@@ -39,9 +39,13 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
             onDone = onDone,
         )
         CaptureUiState.Answerable -> {
+            // The form opens its Manual section only when Claude isn't set up; wait to know which.
+            val assistAvailable by viewModel.assistAvailable.collectAsState()
+            val hasAssist = assistAvailable ?: return
             val activities by viewModel.activities.collectAsState()
             val locations by viewModel.locations.collectAsState()
             val socials by viewModel.socials.collectAsState()
+            val painTypes by viewModel.painTypes.collectAsState()
             val usage by viewModel.usage.collectAsState()
             val locationStatus by viewModel.locationStatus.collectAsState()
             val suggested by viewModel.suggestedLocationId.collectAsState()
@@ -52,11 +56,13 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
                 activities = activities,
                 locations = locations,
                 socials = socials,
+                painTypes = painTypes,
                 usage = usage,
                 locationStatus = locationStatus,
                 suggestedLocationId = suggested,
                 companyStatus = companyStatus,
                 suggestedSocialId = suggestedSocial,
+                onAssist = if (hasAssist) viewModel::assist else null,
                 saveLabel = "Save",
                 onSave = viewModel::save,
                 onAddOption = viewModel::addOption,

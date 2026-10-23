@@ -9,9 +9,14 @@ import dev.russell.moodsampler.data.backup.PromptDto
 import dev.russell.moodsampler.data.backup.SampleActivityDto
 import dev.russell.moodsampler.data.backup.SampleDeviceDto
 import dev.russell.moodsampler.data.backup.SampleDto
+import dev.russell.moodsampler.data.backup.SamplePainDto
+import dev.russell.moodsampler.data.backup.SampleTagDto
 import dev.russell.moodsampler.data.backup.SettingsDto
+import dev.russell.moodsampler.data.backup.missingDefaultCategories
 import dev.russell.moodsampler.data.backup.toEntity
 import dev.russell.moodsampler.data.db.AppDatabase
+import dev.russell.moodsampler.data.db.CategoryType
+import dev.russell.moodsampler.data.db.DefaultCategories
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -21,12 +26,23 @@ class BackupCodecTest {
         schemaVersion = AppDatabase.VERSION,
         appVersionName = "1.1",
         exportedAtEpochMs = 1_700_000_000_000,
-        settings = SettingsDto(6, 540, 1320, 20, autoCompany = false, deviceSalt = "salt"),
-        categories = listOf(CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"), CategoryDto(2, "LOCATION", "Home", 1, true)),
+        settings = SettingsDto(6, 540, 1320, 20, autoCompany = false, deviceSalt = "salt", claudeModel = "claude-haiku-5-5"),
+        categories = listOf(
+            CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"),
+            CategoryDto(2, "LOCATION", "Home", 1, true),
+            CategoryDto(5, "PAIN", "Headache", 1, false),
+        ),
         prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
-        samples = listOf(SampleDto(3, 7, 7f, 4f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000)),
+        samples = listOf(
+            SampleDto(
+                3, 7, 7f, 4f, 4, null, null, "note, with \"quotes\"", 1_700_000_120_000, 40.0, -105.0, 12f, 1_700_000_119_000,
+                summary = "Working, a bit of a headache.",
+            ),
+        ),
         sampleActivities = listOf(SampleActivityDto(3, 1)),
         sampleDevices = listOf(SampleDeviceDto(3, "0123456789abcdef")),
+        samplePainTypes = listOf(SamplePainDto(3, 5)),
+        sampleTags = listOf(SampleTagDto(3, "deadline")),
     )
 
     @Test
@@ -55,6 +71,10 @@ class BackupCodecTest {
         assertThat(decoded.settings.autoCompany).isTrue()
         assertThat(decoded.settings.deviceSalt).isNull()
         assertThat(decoded.sampleDevices).isEmpty()
+        assertThat(decoded.samplePainTypes).isEmpty()
+        assertThat(decoded.sampleTags).isEmpty()
+        assertThat(decoded.settings.claudeModel).isNull()
+        assertThat(decoded.samples.single().summary).isNull()
         assertThat(decoded.categories.single().group).isNull()
         assertThat(decoded.categories.single().toEntity().group).isEqualTo("WORK")
         assertThat(decoded.samples.single().latitude).isNull()
@@ -70,6 +90,17 @@ class BackupCodecTest {
         assertThat(other.toEntity(schemaVersion = 6).isArchived).isTrue()
         assertThat(other.toEntity(schemaVersion = 7).isArchived).isFalse()
         assertThat(CategoryDto(4, "LOCATION", "Other", 3, false).toEntity(schemaVersion = 6).isArchived).isFalse()
+    }
+
+    @Test
+    fun preV9BackupGetsTheDefaultPainTypes() {
+        val old = sample.copy(schemaVersion = 8, categories = sample.categories.filter { it.type != "PAIN" })
+        val added = old.missingDefaultCategories()
+        assertThat(added.map { it.label }).containsExactlyElementsIn(DefaultCategories.PAIN_TYPES).inOrder()
+        assertThat(added.all { it.type == CategoryType.PAIN && it.id == 0L }).isTrue()
+        assertThat(added.map { it.sortOrder }).isEqualTo((1..DefaultCategories.PAIN_TYPES.size).toList())
+        // Current backups already carry their own pain types.
+        assertThat(sample.missingDefaultCategories()).isEmpty()
     }
 
     @Test

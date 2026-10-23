@@ -1,9 +1,11 @@
 package dev.russell.moodsampler.ui.capture
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,17 +29,27 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -67,19 +79,24 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.russell.moodsampler.appGraph
 import dev.russell.moodsampler.data.MoodScale
 import dev.russell.moodsampler.data.PainScale
 import dev.russell.moodsampler.data.SkipReason
+import dev.russell.moodsampler.data.claude.AssistFill
+import dev.russell.moodsampler.data.claude.ClaudeException
 import dev.russell.moodsampler.data.db.CategoryEntity
 import dev.russell.moodsampler.data.db.CategoryType
 import dev.russell.moodsampler.data.db.byActivityGroup
 import dev.russell.moodsampler.ui.dashboard.charts.MoodChartColors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** Everything the user enters on the capture form; also the seed for the edit screen. */
@@ -89,24 +106,35 @@ data class CaptureFormValues(
     /** 0..10; null until picked. Always set on save. */
     val arousal: Int? = null,
     val pain: Int = 0,
+    val painTypeIds: List<Long> = emptyList(),
     val activityIds: List<Long> = emptyList(),
     val locationId: Long? = null,
     val socialId: Long? = null,
+    /** The narration: what the user typed or dictated. Stored as the sample's note. */
     val note: String = "",
+    /** Claude's one-line summary of the narration, when Claude filled the form. */
+    val summary: String? = null,
+    /** Claude's free-form tags; the user can remove them before saving. */
+    val tags: List<String> = emptyList(),
     /** File name of the photo already stored with this answer (edit seed / kept on update). */
     val photoPath: String? = null,
     /** A photo taken on this form and not yet stored: the capture's content Uri. */
     val newPhotoUri: String? = null,
 )
 
+/** Asks Claude to fill the form from the narration and photo; see [dev.russell.moodsampler.data.claude.CaptureAssistant.fill]. */
+typealias AssistAction = suspend (narration: String, photo: Uri?, guessedPlaceId: Long?, guessedSocialId: Long?) -> AssistFill
+
 /**
  * The shared mood-capture form. Used for live prompts (with a "Can't answer now"
  * skip path) and for editing a past answer from History (no skip path).
  *
- * Built to be answered in a few taps: three tap-to-pick scales up top, the
- * context (place, activities, company) pre-shortened below, note and photo
- * tucked behind chips, and Save pinned to the bottom. Each context section ends in
- * an "Other…" chip that names a new option, kept for future prompts.
+ * Built so a capture can be mostly talked through: the narration box (type or
+ * dictate) and photo come first, and "Fill in with Claude" turns them into the place,
+ * activities, company and pain types, plus a summary and tags. The three tap scales
+ * stay the user's own. The context chips sit in a collapsible "Manual" section that
+ * shows what's picked at a glance; each ends in an "Other…" chip that names a new
+ * option, kept for future prompts. Save is pinned to the bottom.
  */
 @Composable
 internal fun CaptureForm(
@@ -114,6 +142,7 @@ internal fun CaptureForm(
     activities: List<CategoryEntity>,
     locations: List<CategoryEntity>,
     socials: List<CategoryEntity>,
+    painTypes: List<CategoryEntity>,
     /** Sample counts per category id; orders the short lists by "most used". */
     usage: Map<Long, Int>,
     locationStatus: LocationStatus,
@@ -122,6 +151,8 @@ internal fun CaptureForm(
     companyStatus: CompanyStatus,
     /** Company matched from nearby devices; preselected until the user touches the company row. */
     suggestedSocialId: Long?,
+    /** Null when no Claude API key is set: the form is filled by hand. */
+    onAssist: AssistAction?,
     saveLabel: String,
     onSave: (CaptureFormValues) -> Unit,
     /** Adds (or matches) an option typed into an "Other…" chip; its id, or null if nothing was added. */
@@ -134,17 +165,25 @@ internal fun CaptureForm(
     var valence by rememberSaveable { mutableIntStateOf(initial.valence ?: UNPICKED) }
     var arousal by rememberSaveable { mutableIntStateOf(initial.arousal ?: UNPICKED) }
     var pain by rememberSaveable { mutableIntStateOf(initial.pain) }
+    val painTypeIds = rememberSaveable(saver = LongListSaver) { initial.painTypeIds.toMutableStateList() }
     val activityIds = rememberSaveable(saver = LongListSaver) { initial.activityIds.toMutableStateList() }
     var locationId by rememberSaveable { mutableStateOf(initial.locationId) }
     var socialId by rememberSaveable { mutableStateOf(initial.socialId) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
-    var noteOpen by rememberSaveable { mutableStateOf(initial.note.isNotEmpty()) }
+    var summary by rememberSaveable { mutableStateOf(initial.summary) }
+    val tags = rememberSaveable(saver = StringListSaver) { initial.tags.toMutableStateList() }
     var photoPath by rememberSaveable { mutableStateOf(initial.photoPath) }
     var newPhotoUri by rememberSaveable { mutableStateOf(initial.newPhotoUri) }
     val photoStore = LocalContext.current.appGraph.photoStore
     var showSkip by rememberSaveable { mutableStateOf(false) }
     var placeTouched by rememberSaveable { mutableStateOf(false) }
     var companyTouched by rememberSaveable { mutableStateOf(false) }
+    var activitiesTouched by rememberSaveable { mutableStateOf(false) }
+    var painTypesTouched by rememberSaveable { mutableStateOf(false) }
+    // Without Claude the chips are the only way in, so start open.
+    var manualOpen by rememberSaveable { mutableStateOf(onAssist == null) }
+    var assisting by remember { mutableStateOf(false) }
+    var assistError by rememberSaveable { mutableStateOf<String?>(null) }
     var addingType by rememberSaveable { mutableStateOf<CategoryType?>(null) }
     val scope = rememberCoroutineScope()
     val ready = valence != UNPICKED && arousal != UNPICKED
@@ -163,6 +202,44 @@ internal fun CaptureForm(
         newPhotoUri = uri.toString()
     }
     val photo = newPhotoUri?.let(Uri::parse) ?: photoPath?.let(photoStore::uri)
+    val dictation = rememberDictation { heard ->
+        note = listOf(note.trimEnd(), heard).filter { it.isNotEmpty() }.joinToString(" ")
+    }
+
+    /** Claude's picks fill whatever the user hasn't set by hand; an empty answer keeps what's there. */
+    fun applyFill(fill: AssistFill) {
+        summary = fill.summary
+        tags.clear()
+        tags.addAll(fill.tags)
+        if (!placeTouched) fill.locationId?.let { locationId = it }
+        if (!companyTouched) fill.socialId?.let { socialId = it }
+        mergeInto(activityIds, fill.activityIds, replace = !activitiesTouched)
+        mergeInto(painTypeIds, fill.painTypeIds, replace = !painTypesTouched)
+        manualOpen = true
+    }
+
+    val askClaude: (() -> Unit)? = onAssist?.let { assist ->
+        {
+            assisting = true
+            assistError = null
+            scope.launch {
+                try {
+                    applyFill(
+                        assist(note, photo, locationId.takeIf { !placeTouched }, socialId.takeIf { !companyTouched })
+                    )
+                } catch (e: ClaudeException) {
+                    assistError = e.message
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Capture assist failed", e)
+                    assistError = "Something went wrong asking Claude (${e.javaClass.simpleName}). Fill it in by hand."
+                } finally {
+                    assisting = false
+                }
+            }
+        }
+    }
 
     Column(modifier.fillMaxSize()) {
         Column(
@@ -173,6 +250,30 @@ internal fun CaptureForm(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             header()
+
+            NarrationCard(
+                note = note,
+                onNoteChange = { note = it },
+                dictation = dictation,
+                photo = photo,
+                takePhoto = takePhoto,
+                onRemovePhoto = {
+                    newPhotoUri?.let { photoStore.discardCapture(Uri.parse(it)) }
+                    newPhotoUri = null
+                    photoPath = null
+                },
+                askClaude = askClaude?.takeIf { note.isNotBlank() || photo != null },
+                claudeAvailable = onAssist != null,
+                assisting = assisting,
+                assistError = assistError,
+                summary = summary,
+                tags = tags,
+                onRemoveTag = { tags.remove(it) },
+                onClearSummary = {
+                    summary = null
+                    tags.clear()
+                },
+            )
 
             Surface(
                 shape = RoundedCornerShape(24.dp),
@@ -197,60 +298,59 @@ internal fun CaptureForm(
                         highAnchor = "Wired",
                         onPick = { arousal = it },
                     )
-                    TapScale(
-                        title = "Pain",
-                        range = PainScale.MIN..PainScale.MAX,
-                        value = pain,
-                        color = MoodChartColors.pain(),
-                        lowAnchor = "None",
-                        highAnchor = "Worst imaginable",
-                        valueLabel = { "$it · ${PainScale.descriptor(it)}" },
-                        onPick = { pain = it },
-                    )
+                    Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TapScale(
+                            title = "Pain",
+                            range = PainScale.MIN..PainScale.MAX,
+                            value = pain,
+                            color = MoodChartColors.pain(),
+                            lowAnchor = "None",
+                            highAnchor = "Worst imaginable",
+                            valueLabel = { "$it · ${PainScale.descriptor(it)}" },
+                            onPick = { pain = it },
+                        )
+                        if (pain > 0 || painTypeIds.isNotEmpty()) {
+                            PainTypeSection(painTypes, painTypeIds, onOther = { addingType = CategoryType.PAIN }) { id ->
+                                painTypesTouched = true
+                                if (!painTypeIds.remove(id)) painTypeIds.add(id)
+                            }
+                        }
+                    }
                 }
             }
 
-            PlaceSection(
-                locations = locations,
-                usage = usage,
-                selectedId = locationId,
-                suggestedId = suggestedLocationId,
-                status = locationStatus,
-                onOther = { addingType = CategoryType.LOCATION },
+            ManualSection(
+                open = manualOpen,
+                onToggle = { manualOpen = !manualOpen },
+                picked = remember(locationId, activityIds.toList(), socialId, locations, activities, socials) {
+                    pickedSummary(locationId, activityIds, socialId, locations + activities + socials)
+                },
             ) {
-                placeTouched = true
-                locationId = if (locationId == it) null else it
-            }
-            ActivitySection(activities, usage, activityIds, onOther = { addingType = CategoryType.ACTIVITY }) { id ->
-                if (!activityIds.remove(id)) activityIds.add(id)
-            }
-            CompanySection(socials, socialId, companyStatus, onOther = { addingType = CategoryType.SOCIAL }) {
-                companyTouched = true
-                socialId = if (socialId == it) null else it
-            }
-
-            Extras(
-                noteOpen = noteOpen,
-                onOpenNote = { noteOpen = true },
-                takePhoto = takePhoto.takeIf { photo == null },
-            )
-            if (noteOpen) NoteField(note, autoFocus = initial.note.isEmpty()) { note = it }
-            if (photo != null) {
-                AttachedPhoto(
-                    photo = photo,
-                    onRetake = takePhoto,
-                    onRemove = {
-                        newPhotoUri?.let { photoStore.discardCapture(Uri.parse(it)) }
-                        newPhotoUri = null
-                        photoPath = null
-                    },
-                )
+                PlaceSection(
+                    locations = locations,
+                    usage = usage,
+                    selectedId = locationId,
+                    suggestedId = suggestedLocationId,
+                    status = locationStatus,
+                    onOther = { addingType = CategoryType.LOCATION },
+                ) {
+                    placeTouched = true
+                    locationId = if (locationId == it) null else it
+                }
+                ActivitySection(activities, usage, activityIds, onOther = { addingType = CategoryType.ACTIVITY }) { id ->
+                    activitiesTouched = true
+                    if (!activityIds.remove(id)) activityIds.add(id)
+                }
+                CompanySection(socials, socialId, companyStatus, onOther = { addingType = CategoryType.SOCIAL }) {
+                    companyTouched = true
+                    socialId = if (socialId == it) null else it
+                }
             }
         }
 
         BottomBar(
             saveLabel = saveLabel,
-            ready = ready,
+            ready = ready && !assisting,
             onSkip = onSkip?.let { { showSkip = true } },
             onSave = {
                 onSave(
@@ -258,10 +358,13 @@ internal fun CaptureForm(
                         valence = valence,
                         arousal = arousal,
                         pain = pain,
+                        painTypeIds = painTypeIds.toList(),
                         activityIds = activityIds.toList(),
                         locationId = locationId,
                         socialId = socialId,
                         note = note,
+                        summary = summary,
+                        tags = tags.toList(),
                         photoPath = photoPath,
                         newPhotoUri = newPhotoUri,
                     )
@@ -277,8 +380,9 @@ internal fun CaptureForm(
                 val id = onAddOption(type, label) ?: return@launch
                 when (type) {
                     CategoryType.LOCATION -> { placeTouched = true; locationId = id }
-                    CategoryType.ACTIVITY -> if (id !in activityIds) activityIds.add(id)
+                    CategoryType.ACTIVITY -> { activitiesTouched = true; if (id !in activityIds) activityIds.add(id) }
                     CategoryType.SOCIAL -> { companyTouched = true; socialId = id }
+                    CategoryType.PAIN -> { painTypesTouched = true; if (id !in painTypeIds) painTypeIds.add(id) }
                 }
             }
         }
@@ -288,6 +392,28 @@ internal fun CaptureForm(
         SkipDialog(onDismiss = { showSkip = false }, onConfirm = { showSkip = false; onSkip(it) })
     }
 }
+
+/** Replace [target] with [picked] (when [replace]) or add the new ones; an empty [picked] changes nothing. */
+private fun mergeInto(target: SnapshotStateList<Long>, picked: List<Long>, replace: Boolean) {
+    if (picked.isEmpty()) return
+    if (replace) target.clear()
+    picked.filter { it !in target }.forEach(target::add)
+}
+
+/** "Home · Work, Commuting · Alone" — what the collapsed Manual section shows. */
+private fun pickedSummary(locationId: Long?, activityIds: List<Long>, socialId: Long?, options: List<CategoryEntity>): String {
+    val labels = options.associate { it.id to it.label }
+    return listOfNotNull(
+        locationId?.let(labels::get),
+        activityIds.mapNotNull(labels::get).joinToString(", ").ifEmpty { null },
+        socialId?.let(labels::get),
+    ).joinToString(" · ")
+}
+
+private val StringListSaver = listSaver<SnapshotStateList<String>, String>(
+    save = { it.toList() },
+    restore = { it.toMutableStateList() },
+)
 
 private val LongListSaver = listSaver<SnapshotStateList<Long>, Long>(
     save = { it.toList() },
@@ -516,14 +642,197 @@ private fun companyCaption(status: CompanyStatus): String? = when (status) {
     CompanyStatus.Unavailable -> "Bluetooth off"
 }
 
-/** "+ Note" and "Photo" chips; each disappears once its field is showing. */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The top of the form: the narration box (typed, or dictated with the mic), the photo,
+ * and "Fill in with Claude" with its result — a summary and removable tags — or error.
+ */
 @Composable
-private fun Extras(noteOpen: Boolean, onOpenNote: () -> Unit, takePhoto: (() -> Unit)?) {
-    if (noteOpen && takePhoto == null) return
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (!noteOpen) ExtraChip(Icons.Outlined.EditNote, "Note", onOpenNote)
-        if (takePhoto != null) ExtraChip(Icons.Outlined.PhotoCamera, "Photo", takePhoto)
+private fun NarrationCard(
+    note: String,
+    onNoteChange: (String) -> Unit,
+    dictation: Dictation?,
+    photo: Uri?,
+    takePhoto: (() -> Unit)?,
+    onRemovePhoto: () -> Unit,
+    /** Null while there's nothing to send yet or Claude isn't set up. */
+    askClaude: (() -> Unit)?,
+    claudeAvailable: Boolean,
+    assisting: Boolean,
+    assistError: String?,
+    summary: String?,
+    tags: List<String>,
+    onRemoveTag: (String) -> Unit,
+    onClearSummary: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            Modifier.padding(16.dp).animateContentSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = note,
+                onValueChange = onNoteChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("What are you doing, thinking, feeling?") },
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                shape = RoundedCornerShape(16.dp),
+                minLines = 3,
+                maxLines = 8,
+                trailingIcon = dictation?.let { d ->
+                    {
+                        IconButton(onClick = d::toggle) {
+                            Icon(
+                                if (d.listening) Icons.Filled.Stop else Icons.Outlined.Mic,
+                                contentDescription = if (d.listening) "Stop dictating" else "Dictate",
+                                tint = if (d.listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                },
+            )
+            dictation?.let { d ->
+                when {
+                    d.listening -> Caption(d.partial.ifEmpty { "Listening…" })
+                    d.error != null -> Caption(d.error.orEmpty(), error = true)
+                }
+            }
+
+            if (photo != null) AttachedPhoto(photo = photo, onRetake = takePhoto, onRemove = onRemovePhoto)
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (photo == null && takePhoto != null) ExtraChip(Icons.Outlined.PhotoCamera, "Photo", takePhoto)
+                Spacer(Modifier.weight(1f))
+                if (claudeAvailable) {
+                    FilledTonalButton(onClick = { askClaude?.invoke() }, enabled = askClaude != null && !assisting) {
+                        if (assisting) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (summary == null) "Fill in with Claude" else "Fill in again")
+                    }
+                }
+            }
+
+            if (!claudeAvailable) {
+                Caption("Add a Claude API key in Settings to fill in the rest from what you write.")
+            }
+            assistError?.let { Caption(it, error = true) }
+            if (summary != null || tags.isNotEmpty()) {
+                ClaudeResult(summary, tags, onRemoveTag, onClearSummary)
+            }
+        }
+    }
+}
+
+/** Claude's summary and tags; tags come off with a tap, "Clear" drops both. */
+@Composable
+private fun ClaudeResult(summary: String?, tags: List<String>, onRemoveTag: (String) -> Unit, onClear: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                summary ?: "Tags",
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = if (summary != null) FontStyle.Italic else FontStyle.Normal,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onClear) { Text("Clear") }
+        }
+        if (tags.isNotEmpty()) {
+            ChipFlow {
+                tags.forEach { tag ->
+                    InputChip(
+                        selected = false,
+                        onClick = { onRemoveTag(tag) },
+                        label = { Text(tag) },
+                        trailingIcon = {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove $tag", Modifier.size(InputChipDefaults.IconSize))
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Caption(text: String, error: Boolean = false) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Kinds of pain, multi-select, under the pain scale. */
+@Composable
+private fun PainTypeSection(
+    options: List<CategoryEntity>,
+    selectedIds: List<Long>,
+    onOther: () -> Unit,
+    onToggle: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        GroupHeader("Where / what kind")
+        ChipFlow {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option.id in selectedIds,
+                    onClick = { onToggle(option.id) },
+                    label = { Text(option.label) },
+                )
+            }
+            OtherChip(onOther)
+        }
+    }
+}
+
+/**
+ * Place, activities and company by hand. Collapsed, it still shows what's picked —
+ * from Claude, the location fix or the device scan — so a glance is enough to check.
+ */
+@Composable
+private fun ManualSection(open: Boolean, onToggle: () -> Unit, picked: String, content: @Composable () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(Modifier.animateContentSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = if (open) "Collapse" else "Expand", onClick = onToggle)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Manual", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        picked.ifEmpty { "Where, doing, with — nothing picked yet" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (open) 1 else 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                )
+            }
+            if (open) {
+                Column(
+                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) { content() }
+            }
+        }
     }
 }
 
@@ -534,22 +843,6 @@ private fun ExtraChip(icon: ImageVector, label: String, onClick: () -> Unit) {
         label = { Text(label) },
         leadingIcon = { Icon(icon, contentDescription = null, Modifier.size(AssistChipDefaults.IconSize)) },
     )
-}
-
-@Composable
-private fun NoteField(note: String, autoFocus: Boolean, onChange: (String) -> Unit) {
-    val focus = remember { FocusRequester() }
-    OutlinedTextField(
-        value = note,
-        onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth().focusRequester(focus),
-        placeholder = { Text("Anything worth remembering?") },
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-        shape = RoundedCornerShape(16.dp),
-        minLines = 2,
-        maxLines = 5,
-    )
-    if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
 /** Save pinned under the scrolling content, with the skip path beside it on live prompts. */
@@ -618,6 +911,7 @@ private fun AddOptionDialog(type: CategoryType, onDismiss: () -> Unit, onConfirm
                     CategoryType.LOCATION -> "Somewhere else?"
                     CategoryType.ACTIVITY -> "Doing something else?"
                     CategoryType.SOCIAL -> "With someone else?"
+                    CategoryType.PAIN -> "Another kind of pain?"
                 }
             )
         },
@@ -633,6 +927,7 @@ private fun AddOptionDialog(type: CategoryType, onDismiss: () -> Unit, onConfirm
                             CategoryType.LOCATION -> "e.g. Grandma's house"
                             CategoryType.ACTIVITY -> "e.g. Gardening"
                             CategoryType.SOCIAL -> "e.g. Roommates"
+                            CategoryType.PAIN -> "e.g. Sciatica"
                         }
                     )
                 },
@@ -669,6 +964,7 @@ private fun shortlist(
 }
 
 private const val UNPICKED = -1
+private const val TAG = "MoodSampler"
 private const val PLACE_SHORTLIST_SIZE = 5
 private const val ACTIVITY_SHORTLIST_SIZE = 8
 

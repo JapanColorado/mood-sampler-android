@@ -25,7 +25,14 @@ enum class PromptStatus {
     CANCELLED,
 }
 
-enum class CategoryType { ACTIVITY, LOCATION, SOCIAL }
+enum class CategoryType {
+    ACTIVITY,
+    LOCATION,
+    SOCIAL,
+
+    /** Kind of pain (headache, back pain…), multi-select under the pain scale (schema v9). */
+    PAIN,
+}
 
 @Entity(tableName = "scheduled_prompt", indices = [Index("localDate"), Index("status")])
 data class ScheduledPromptEntity(
@@ -77,6 +84,8 @@ data class SampleEntity(
     val fixAtEpochMs: Long? = null,
     /** File name of an optional photo in [dev.russell.moodsampler.data.PhotoStore] (schema v4). */
     val photoPath: String? = null,
+    /** Claude's one-line summary of [note] (and photo) (schema v9); null when Claude wasn't asked. */
+    val summary: String? = null,
 )
 
 /** Many-to-many: a sample can tag several activities. */
@@ -102,6 +111,49 @@ data class SampleEntity(
 data class SampleActivityCrossRef(
     val sampleId: Long,
     val categoryId: Long,
+)
+
+/** Many-to-many: the kinds of pain a sample names (schema v9). */
+@Entity(
+    tableName = "sample_pain",
+    primaryKeys = ["sampleId", "categoryId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SampleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sampleId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = CategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["categoryId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("categoryId")],
+)
+data class SamplePainCrossRef(
+    val sampleId: Long,
+    val categoryId: Long,
+)
+
+/** A free-form tag Claude attached to a sample, e.g. "deadline" (schema v9). Stored lower-case. */
+@Entity(
+    tableName = "sample_tag",
+    primaryKeys = ["sampleId", "tag"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SampleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sampleId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class SampleTagEntity(
+    val sampleId: Long,
+    val tag: String,
 )
 
 /**
@@ -138,7 +190,7 @@ data class CategoryEntity(
     @ColumnInfo(name = "groupKey") val group: String? = null,
 )
 
-/** A sample plus the ids of the activities it tagged. */
+/** A sample plus the ids of the activities and pain types it tagged, and its free-form tags. */
 data class SampleWithActivities(
     @Embedded val sample: SampleEntity,
     @Relation(
@@ -148,6 +200,20 @@ data class SampleWithActivities(
         projection = ["categoryId"],
     )
     val activityIds: List<Long>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "sampleId",
+        entity = SamplePainCrossRef::class,
+        projection = ["categoryId"],
+    )
+    val painTypeIds: List<Long> = emptyList(),
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "sampleId",
+        entity = SampleTagEntity::class,
+        projection = ["tag"],
+    )
+    val tags: List<String> = emptyList(),
 )
 
 /** A concluded prompt (ANSWERED or MISSED) with its sample when answered. */

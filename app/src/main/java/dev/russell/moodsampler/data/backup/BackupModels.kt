@@ -9,6 +9,8 @@ import dev.russell.moodsampler.data.db.PromptStatus
 import dev.russell.moodsampler.data.db.SampleActivityCrossRef
 import dev.russell.moodsampler.data.db.SampleDeviceEntity
 import dev.russell.moodsampler.data.db.SampleEntity
+import dev.russell.moodsampler.data.db.SamplePainCrossRef
+import dev.russell.moodsampler.data.db.SampleTagEntity
 import dev.russell.moodsampler.data.db.ScheduledPromptEntity
 import dev.russell.moodsampler.data.settings.AppSettings
 import kotlinx.serialization.SerialName
@@ -36,6 +38,10 @@ data class Backup(
     val sampleActivities: List<SampleActivityDto>,
     /** Hashed nearby devices per sample (schema v8); absent in older backups. */
     val sampleDevices: List<SampleDeviceDto> = emptyList(),
+    /** Pain types per sample (schema v9); absent in older backups. */
+    val samplePainTypes: List<SamplePainDto> = emptyList(),
+    /** Claude's free-form tags per sample (schema v9); absent in older backups. */
+    val sampleTags: List<SampleTagDto> = emptyList(),
 ) {
     companion object {
         const val FORMAT = 1
@@ -52,6 +58,11 @@ data class SettingsDto(
     val autoCompany: Boolean = true,
     /** Salt behind [SampleDeviceDto.deviceHash] (schema v8); null when nothing was ever scanned. */
     val deviceSalt: String? = null,
+    /**
+     * Claude model id for capture assist (schema v9); null in older backups (keeps the
+     * current choice). The API key is never backed up.
+     */
+    val claudeModel: String? = null,
 )
 
 @Serializable
@@ -101,6 +112,8 @@ data class SampleDto(
      * a restore on the same phone keeps its photos, elsewhere the answer has none.
      */
     val photoPath: String? = null,
+    /** Claude's one-line summary (schema v9). */
+    val summary: String? = null,
 )
 
 @Serializable
@@ -108,6 +121,12 @@ data class SampleActivityDto(val sampleId: Long, val categoryId: Long)
 
 @Serializable
 data class SampleDeviceDto(val sampleId: Long, val deviceHash: String)
+
+@Serializable
+data class SamplePainDto(val sampleId: Long, val categoryId: Long)
+
+@Serializable
+data class SampleTagDto(val sampleId: Long, val tag: String)
 
 class BackupFormatException(message: String) : Exception(message)
 
@@ -141,7 +160,7 @@ object BackupCodec {
 // ---- Entity <-> DTO mapping ----
 
 fun AppSettings.toDto(deviceSalt: String? = null) =
-    SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation, autoCompany, deviceSalt)
+    SettingsDto(windowsPerDay, dayStartMinutes, dayEndMinutes, expiryMinutes, autoLocation, autoCompany, deviceSalt, claudeModel)
 
 fun CategoryEntity.toDto() = CategoryDto(id, type.name, label, sortOrder, isArchived, group)
 /** [schemaVersion] is the backup's: pre-v7 files still carry an active "Other" activity. */
@@ -155,6 +174,18 @@ fun CategoryDto.toEntity(schemaVersion: Int = AppDatabase.VERSION): CategoryEnti
     return CategoryEntity(id, t, label, sortOrder, isArchived || oldOther, g)
 }
 
+/**
+ * Default categories a pre-v9 backup predates — the pain types, mirroring MIGRATION_8_9 —
+ * as new rows (id 0, so the database assigns one) to insert after the backup's own.
+ */
+fun Backup.missingDefaultCategories(): List<CategoryEntity> {
+    if (schemaVersion >= 9) return emptyList()
+    val have = categories.filter { it.type == CategoryType.PAIN.name }.map { it.label.lowercase() }.toSet()
+    val start = categories.filter { it.type == CategoryType.PAIN.name }.maxOfOrNull { it.sortOrder } ?: 0
+    return DefaultCategories.PAIN_TYPES.filter { it.lowercase() !in have }
+        .mapIndexed { i, label -> CategoryEntity(type = CategoryType.PAIN, label = label, sortOrder = start + i + 1) }
+}
+
 fun ScheduledPromptEntity.toDto() = PromptDto(
     id, scheduledAtEpochMs, localDate, windowIndex, status.name, notifiedAtEpochMs, answeredAtEpochMs, skipReason,
 )
@@ -164,7 +195,7 @@ fun PromptDto.toEntity() = ScheduledPromptEntity(
 
 fun SampleEntity.toDto() = SampleDto(
     id, promptId, valence.toFloat(), arousal.toFloat(), pain, locationId, socialId, note, createdAtEpochMs,
-    latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
+    latitude, longitude, accuracyM, fixAtEpochMs, photoPath, summary,
 )
 /** [schemaVersion] is the backup's: older files carry mood on earlier scales that need converting. */
 fun SampleDto.toEntity(schemaVersion: Int): SampleEntity {
@@ -175,7 +206,7 @@ fun SampleDto.toEntity(schemaVersion: Int): SampleEntity {
     }
     return SampleEntity(
         id, promptId, mood(valence), mood(arousal), pain, locationId, socialId, note, createdAtEpochMs,
-        latitude, longitude, accuracyM, fixAtEpochMs, photoPath,
+        latitude, longitude, accuracyM, fixAtEpochMs, photoPath, summary,
     )
 }
 
@@ -184,3 +215,9 @@ fun SampleActivityDto.toEntity() = SampleActivityCrossRef(sampleId, categoryId)
 
 fun SampleDeviceEntity.toDto() = SampleDeviceDto(sampleId, deviceHash)
 fun SampleDeviceDto.toEntity() = SampleDeviceEntity(sampleId, deviceHash)
+
+fun SamplePainCrossRef.toDto() = SamplePainDto(sampleId, categoryId)
+fun SamplePainDto.toEntity() = SamplePainCrossRef(sampleId, categoryId)
+
+fun SampleTagEntity.toDto() = SampleTagDto(sampleId, tag)
+fun SampleTagDto.toEntity() = SampleTagEntity(sampleId, tag)

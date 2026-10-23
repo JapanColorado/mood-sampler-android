@@ -62,11 +62,18 @@ object DefaultCategories {
         "Alone", "Partner", "Family", "Friends", "Coworkers", "Strangers",
     )
 
+    /** Pain types (schema v9); the 8→9 migration adds them for existing installs. */
+    val PAIN_TYPES = listOf(
+        "Headache", "Migraine", "Neck / shoulder", "Back", "Joint", "Muscle soreness",
+        "Stomach / gut", "Menstrual cramps", "Tooth / jaw", "Eye strain", "Nerve pain", "Injury",
+    )
+
     /** Full seed for a fresh install, in display order. */
     val DEFAULT_CATEGORIES: Map<CategoryType, List<String>> = mapOf(
         CategoryType.ACTIVITY to V1_ACTIVITIES + V2_ADDED_ACTIVITIES,
         CategoryType.LOCATION to V1_LOCATIONS + V2_ADDED_LOCATIONS,
         CategoryType.SOCIAL to SOCIAL,
+        CategoryType.PAIN to PAIN_TYPES,
     )
 
     /**

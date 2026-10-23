@@ -35,10 +35,11 @@ The debug build uses the appId `dev.russell.moodsampler.debug`, so it installs a
 - **Time zones**: always use `DeviceClock`, which re-reads the system zone on every call, never `Clock.systemDefaultZone()`. Prompts are stored as instants. When the zone changes, `ensureScheduled` redraws the future schedule.
 - **Never show upcoming prompt times in the UI.** Anticipation biases the sampling.
 - **Data** (`data/`): Room (`data/db/`), DataStore settings (`data/settings/`), `CsvExporter`, a JSON backup/restore (`data/backup/`), `PhotoStore` (photos live in `filesDir`; the sample stores only the file name), and a one-shot foreground location fix plus `PlaceMatcher`, which suggests a place from nearby past answers, and (`data/bluetooth/`) a few-second BLE scan whose salted device hashes feed `CompanyMatcher`, which suggests company the same way. `OnboardingGate` stops any scheduling until onboarding finishes.
+- **Claude capture assist** (`data/claude/`): `CaptureAssistant` sends the narration (the sample's `note`), photo and option labels to the Anthropic API through the official Java SDK (`ClaudeClient`, structured output) and maps the reply onto category ids, adding new options via `CategoryRepository.findOrAdd`. Prompt text, schema and reply cleanup are pure in `AssistPrompt` (unit-tested). Claude never sets valence, energy or the pain number. The API key lives in its own DataStore (`ClaudeKeyStore`), excluded from the JSON backup and from Android backup (`res/xml/data_extraction_rules.xml`).
 
 ## Database changes
 
-- The schema version is `AppDatabase.VERSION`, currently 8. Keep the README's "Data" section in step with it.
+- The schema version is `AppDatabase.VERSION`, currently 9. Keep the README's "Data" section in step with it.
 - Migrations live in `data/db/Migrations.kt`. They are explicit, and there is **no destructive fallback**. A new migration must be registered in `AppDatabase.build`'s `addMigrations(...)`.
 - KSP exports schemas to `app/schemas/`. Commit the new `N.json`, because `MigrationTest` also uses these files as fixtures. Add a `MigrationTest` case for each migration.
 - A schema or default-category change usually also needs updates to:

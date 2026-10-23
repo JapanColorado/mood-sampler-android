@@ -42,6 +42,8 @@ class BackupManager(
         samples = db.sampleDao().getAll().map { it.toDto() },
         sampleActivities = db.sampleDao().getAllActivities().map { it.toDto() },
         sampleDevices = db.sampleDao().getAllDevices().map { it.toDto() },
+        samplePainTypes = db.sampleDao().getAllPainTypes().map { it.toDto() },
+        sampleTags = db.sampleDao().getAllTags().map { it.toDto() },
     )
 
     /** Parse and validate without touching the database. */
@@ -59,6 +61,8 @@ class BackupManager(
     suspend fun deleteSamplesAndPrompts() {
         db.withTransaction {
             db.sampleDao().deleteAllActivities()
+            db.sampleDao().deleteAllPainTypes()
+            db.sampleDao().deleteAllTags()
             db.sampleDao().deleteAllDevices()
             db.sampleDao().deleteAll()
             db.scheduledPromptDao().deleteAll()
@@ -74,26 +78,37 @@ class BackupManager(
     )
 
     /**
-     * Replace all local data with [backup]. Rows are inserted with their original
-     * ids inside one transaction (FK order: categories, prompts, samples, tags, devices).
+     * Replace all local data with [backup] (see [replaceTables]).
      * Afterwards the schedule is rebuilt for the current phone/zone/settings.
      */
     suspend fun apply(backup: Backup) {
-        db.withTransaction {
-            db.sampleDao().deleteAllActivities()
-            db.sampleDao().deleteAllDevices()
-            db.sampleDao().deleteAll()
-            db.scheduledPromptDao().deleteAll()
-            db.categoryDao().deleteAll()
-            db.categoryDao().insertAll(backup.categories.map { it.toEntity(backup.schemaVersion) })
-            db.scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
-            db.sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
-            db.sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
-            db.sampleDao().insertDevices(backup.sampleDevices.map { it.toEntity() })
-        }
+        db.replaceTables(backup)
         photos.retainOnly(backup.samples.mapNotNull { it.photoPath })
         settings.replaceAll(backup.settings)
         settings.setOnboardingDone()
         scheduler.onDataReplaced()
     }
+}
+
+/**
+ * Swap every table's rows for [backup]'s, inside one transaction. Rows keep their
+ * original ids (FK order: categories, prompts, samples, then the per-sample rows);
+ * default categories the backup predates are added after its own.
+ */
+internal suspend fun AppDatabase.replaceTables(backup: Backup) = withTransaction {
+    sampleDao().deleteAllActivities()
+    sampleDao().deleteAllPainTypes()
+    sampleDao().deleteAllTags()
+    sampleDao().deleteAllDevices()
+    sampleDao().deleteAll()
+    scheduledPromptDao().deleteAll()
+    categoryDao().deleteAll()
+    categoryDao().insertAll(backup.categories.map { it.toEntity(backup.schemaVersion) })
+    categoryDao().insertAll(backup.missingDefaultCategories())
+    scheduledPromptDao().insertAll(backup.prompts.map { it.toEntity() })
+    sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
+    sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
+    sampleDao().insertPainTypes(backup.samplePainTypes.map { it.toEntity() })
+    sampleDao().insertTags(backup.sampleTags.map { it.toEntity() })
+    sampleDao().insertDevices(backup.sampleDevices.map { it.toEntity() })
 }

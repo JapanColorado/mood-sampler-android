@@ -50,6 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import dev.russell.moodsampler.data.claude.ClaudeModel
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.russell.moodsampler.ui.capture.GroupHeader
@@ -74,6 +78,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     val pendingRestore by viewModel.pendingRestore.collectAsState()
     val pendingWipe by viewModel.pendingWipe.collectAsState()
     val dataMessage by viewModel.dataMessage.collectAsState()
+    val claudeKeyHint by viewModel.claudeKeyHint.collectAsState()
     val context = LocalContext.current
 
     val backupLauncher = rememberLauncherForActivityResult(
@@ -120,10 +125,18 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
 
         LocationCard(enabled = settings.autoLocation, onToggle = viewModel::setAutoLocation)
         CompanyScanCard(enabled = settings.autoCompany, onToggle = viewModel::setAutoCompany)
+        ClaudeCard(
+            keyHint = claudeKeyHint,
+            model = ClaudeModel.parse(settings.claudeModel),
+            onSaveKey = viewModel::setClaudeKey,
+            onClearKey = viewModel::clearClaudeKey,
+            onModel = viewModel::setClaudeModel,
+        )
 
         CategoryEditorCard("Activities", CategoryType.ACTIVITY, categoryGroups, usage, viewModel)
         CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
         CategoryEditorCard("Company", CategoryType.SOCIAL, categoryGroups, usage, viewModel)
+        CategoryEditorCard("Pain types", CategoryType.PAIN, categoryGroups, usage, viewModel)
 
         Card {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -312,6 +325,86 @@ private fun CompanyScanCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                 )
                 OutlinedButton(onClick = permission.request) { Text("Allow nearby devices") }
+            }
+        }
+    }
+}
+
+/**
+ * Claude capture assist: the API key (kept on the phone, out of backups) and the
+ * model, with plain words on what gets sent and when.
+ */
+@Composable
+private fun ClaudeCard(
+    keyHint: String?,
+    model: ClaudeModel,
+    onSaveKey: (String) -> Unit,
+    onClearKey: () -> Unit,
+    onModel: (ClaudeModel) -> Unit,
+) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Fill in with Claude", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Describe the moment in your own words (type or dictate) and Claude fills in place, " +
+                    "activities, company and pain types, plus a summary and tags, for you to check before " +
+                    "saving. Your mood and pain ratings stay your own. Only when you tap \"Fill in with " +
+                    "Claude\", your narration, photo, the local time and your option lists are sent to " +
+                    "Anthropic with your API key; usage is billed to that key.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (keyHint != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("API key saved (…$keyHint)", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = onClearKey) { Text("Remove") }
+                }
+            } else {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it.trim() },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Anthropic API key") },
+                    placeholder = { Text("sk-ant-…") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    supportingText = { Text("From console.anthropic.com. Stays on this phone; never in backups.") },
+                )
+                Button(onClick = { onSaveKey(draft); draft = "" }, enabled = draft.isNotBlank()) { Text("Save key") }
+            }
+            ModelDropdown(model, onModel)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelDropdown(current: ClaudeModel, onSelect: (ClaudeModel) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value = current.label,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Model") },
+            supportingText = { Text(current.blurb) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ClaudeModel.entries.forEach { m ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(m.label)
+                            Text(m.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    onClick = { onSelect(m); open = false },
+                )
             }
         }
     }

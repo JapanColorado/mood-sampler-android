@@ -13,7 +13,7 @@ data class GeoTag(val locationId: Long, val latitude: Double, val longitude: Dou
 /** One device seen with a past answer that named its company — the training set for company suggestions. */
 data class DeviceTag(val sampleId: Long, val socialId: Long, val deviceHash: String)
 
-/** How many samples reference a category (activities via the join table, place/company directly). */
+/** How many samples reference a category (activities and pain types via join tables, place/company directly). */
 data class CategoryUsage(val categoryId: Long, val n: Int)
 
 @Dao
@@ -56,8 +56,28 @@ interface SampleDao {
     @Query("DELETE FROM sample_activity WHERE sampleId = :sampleId")
     suspend fun deleteActivities(sampleId: Long)
 
+    @Query("SELECT * FROM sample_pain ORDER BY sampleId, categoryId")
+    suspend fun getAllPainTypes(): List<SamplePainCrossRef>
+
+    @Insert
+    suspend fun insertPainTypes(refs: List<SamplePainCrossRef>)
+
+    @Query("DELETE FROM sample_pain WHERE sampleId = :sampleId")
+    suspend fun deletePainTypes(sampleId: Long)
+
+    @Query("SELECT * FROM sample_tag ORDER BY sampleId, tag")
+    suspend fun getAllTags(): List<SampleTagEntity>
+
+    @Insert
+    suspend fun insertTags(rows: List<SampleTagEntity>)
+
+    @Query("DELETE FROM sample_tag WHERE sampleId = :sampleId")
+    suspend fun deleteTags(sampleId: Long)
+
     @Query(
         """SELECT categoryId, COUNT(*) AS n FROM sample_activity GROUP BY categoryId
+           UNION ALL
+           SELECT categoryId, COUNT(*) AS n FROM sample_pain GROUP BY categoryId
            UNION ALL
            SELECT locationId AS categoryId, COUNT(*) AS n FROM sample WHERE locationId IS NOT NULL GROUP BY locationId
            UNION ALL
@@ -94,6 +114,12 @@ interface SampleDao {
 
     @Query("DELETE FROM sample_activity")
     suspend fun deleteAllActivities()
+
+    @Query("DELETE FROM sample_pain")
+    suspend fun deleteAllPainTypes()
+
+    @Query("DELETE FROM sample_tag")
+    suspend fun deleteAllTags()
 
     @Query("DELETE FROM sample")
     suspend fun deleteAll()

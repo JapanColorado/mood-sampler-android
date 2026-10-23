@@ -8,6 +8,8 @@ import dev.russell.moodsampler.data.db.PromptStatus
 import dev.russell.moodsampler.data.db.SampleActivityCrossRef
 import dev.russell.moodsampler.data.db.SampleDeviceEntity
 import dev.russell.moodsampler.data.db.SampleEntity
+import dev.russell.moodsampler.data.db.SamplePainCrossRef
+import dev.russell.moodsampler.data.db.SampleTagEntity
 import dev.russell.moodsampler.data.db.ScheduledPromptEntity
 import java.time.LocalDate
 import java.time.LocalTime
@@ -30,6 +32,9 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
     val activities = categories.filter { it.type == CategoryType.ACTIVITY }
     val locations = categories.filter { it.type == CategoryType.LOCATION }
     val socials = categories.filter { it.type == CategoryType.SOCIAL }
+    val painTypes = categories.filter { it.type == CategoryType.PAIN }
+    // Stand-ins for Claude's free-form tags on about a third of the answers.
+    val tagPool = listOf("coffee", "deadline", "rain", "music", "tired", "outdoors", "screen time")
 
     val skipReasons = SkipReason.CAPTURE_CHOICES.map { it.first }
     // Fake device hashes: two per company option, your own earbuds everywhere, plus passers-by.
@@ -88,6 +93,15 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                 val tagged = activities.shuffled(random).take(random.nextInt(1, 4))
                 if (tagged.isNotEmpty()) {
                     sampleDao.insertActivities(tagged.map { SampleActivityCrossRef(sampleId, it.id) })
+                }
+                // Painful moments name one or two kinds of pain.
+                if (pain > 0 && painTypes.isNotEmpty()) {
+                    val kinds = painTypes.shuffled(random).take(random.nextInt(1, 3))
+                    sampleDao.insertPainTypes(kinds.map { SamplePainCrossRef(sampleId, it.id) })
+                }
+                if (random.nextFloat() < 0.33f) {
+                    val tags = tagPool.shuffled(random).take(random.nextInt(1, 3))
+                    sampleDao.insertTags(tags.map { SampleTagEntity(sampleId, it) })
                 }
             }
         }

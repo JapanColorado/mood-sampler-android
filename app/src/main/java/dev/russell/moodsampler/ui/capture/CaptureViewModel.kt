@@ -9,6 +9,8 @@ import dev.russell.moodsampler.data.PainScale
 import dev.russell.moodsampler.data.PhotoStore
 import dev.russell.moodsampler.data.SampleRepository
 import dev.russell.moodsampler.data.bluetooth.BluetoothScanner
+import dev.russell.moodsampler.data.claude.AssistFill
+import dev.russell.moodsampler.data.claude.CaptureAssistant
 import dev.russell.moodsampler.data.bluetooth.DeviceFingerprint
 import dev.russell.moodsampler.data.db.AppDatabase
 import dev.russell.moodsampler.data.db.CategoryEntity
@@ -76,6 +78,7 @@ class CaptureViewModel(
     private val locationProvider: LocationProvider,
     private val bluetoothScanner: BluetoothScanner,
     private val photoStore: PhotoStore,
+    private val assistant: CaptureAssistant,
     private val clock: Clock = DeviceClock,
 ) : ViewModel() {
 
@@ -85,6 +88,11 @@ class CaptureViewModel(
     val activities = categories(CategoryType.ACTIVITY)
     val locations = categories(CategoryType.LOCATION)
     val socials = categories(CategoryType.SOCIAL)
+    val painTypes = categories(CategoryType.PAIN)
+
+    /** Whether a Claude API key is set, so the form can offer to fill itself in; null until known. */
+    val assistAvailable: StateFlow<Boolean?> = assistant.available
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val usage = categoryRepository.usage
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
@@ -182,6 +190,7 @@ class CaptureViewModel(
                     locationId = values.locationId,
                     socialId = values.socialId,
                     note = values.note.trim().ifEmpty { null },
+                    summary = values.summary,
                     createdAtEpochMs = 0,  // stamped by the repository
                     latitude = fix?.latitude,
                     longitude = fix?.longitude,
@@ -190,6 +199,8 @@ class CaptureViewModel(
                     photoPath = photo,
                 ),
                 activityIds = values.activityIds,
+                painTypeIds = values.painTypeIds,
+                tags = values.tags,
                 deviceHashes = deviceHashes,
                 answeredAtMs = clock.millis(),
             )
@@ -202,6 +213,10 @@ class CaptureViewModel(
             }
         }
     }
+
+    /** Claude's fill for the form; see [CaptureAssistant.fill]. */
+    suspend fun assist(narration: String, photo: Uri?, guessedPlaceId: Long?, guessedSocialId: Long?): AssistFill =
+        assistant.fill(narration, photo, guessedPlaceId, guessedSocialId)
 
     /** An option typed into an "Other…" chip, added (or matched) for this and future prompts; its id. */
     suspend fun addOption(type: CategoryType, label: String): Long? = categoryRepository.findOrAdd(type, label)
@@ -230,6 +245,7 @@ class CaptureViewModel(
                 locationProvider = graph.locationProvider,
                 bluetoothScanner = graph.bluetoothScanner,
                 photoStore = graph.photoStore,
+                assistant = graph.captureAssistant,
             )
         }
     }
