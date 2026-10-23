@@ -77,6 +77,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     val usage by viewModel.usage.collectAsState()
     val pendingRestore by viewModel.pendingRestore.collectAsState()
     val pendingWipe by viewModel.pendingWipe.collectAsState()
+    val pendingClearUnused by viewModel.pendingClearUnused.collectAsState()
     val dataMessage by viewModel.dataMessage.collectAsState()
     val claudeKeyHint by viewModel.claudeKeyHint.collectAsState()
     val context = LocalContext.current
@@ -229,6 +230,29 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
                 ) { Text("Delete everything") }
             },
             dismissButton = { TextButton(onClick = viewModel::cancelDeleteAll) { Text("Cancel") } },
+        )
+    }
+
+    pendingClearUnused?.let { pending ->
+        // "company" has no plural: "unused company options".
+        val noun = pending.title.lowercase().let { if (it.endsWith("s")) it else "$it options" }
+        AlertDialog(
+            onDismissRequest = viewModel::cancelClearUnused,
+            title = { Text("Delete ${pending.unused.size} unused $noun?") },
+            text = {
+                Text(
+                    "No sample uses these, so no history is lost: " +
+                        pending.unused.joinToString { it.label } + ". " +
+                        "They're deleted outright, not archived. You can add them again later.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::confirmClearUnused,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cancelClearUnused) { Text("Cancel") } },
         )
     }
 
@@ -486,10 +510,22 @@ private fun CategoryEditorCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (group.archived.isNotEmpty()) {
-                TextButton(onClick = { showArchived = !showArchived }) {
-                    Text(if (showArchived) "Hide archived (${group.archived.size})" else "Archived (${group.archived.size})")
+            val unusedCount = (group.active + group.archived).count { (usage[it.id] ?: 0) == 0 }
+            if (group.archived.isNotEmpty() || unusedCount > 0) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    if (group.archived.isNotEmpty()) {
+                        TextButton(onClick = { showArchived = !showArchived }) {
+                            Text(if (showArchived) "Hide archived (${group.archived.size})" else "Archived (${group.archived.size})")
+                        }
+                    }
+                    if (unusedCount > 0) {
+                        TextButton(onClick = { viewModel.askClearUnused(type, title) }) {
+                            Text("Clear unused ($unusedCount)…")
+                        }
+                    }
                 }
+            }
+            if (group.archived.isNotEmpty()) {
                 if (showArchived) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         group.archived.forEach { category ->

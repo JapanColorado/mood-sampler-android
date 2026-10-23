@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Unused [type] categories awaiting the user's go-ahead to delete; [title] names the list ("Activities"). */
+data class PendingClearUnused(val type: CategoryType, val title: String, val unused: List<CategoryEntity>)
+
 data class PendingRestore(val backup: Backup, val current: BackupSummary, val incoming: BackupSummary)
 
 class SettingsViewModel(
@@ -45,6 +48,9 @@ class SettingsViewModel(
 
     /** Non-null while the "Delete all data" confirmation is showing (what would be deleted). */
     val pendingWipe = MutableStateFlow<BackupSummary?>(null)
+
+    /** Non-null while a "Clear unused" confirmation is showing. */
+    val pendingClearUnused = MutableStateFlow<PendingClearUnused?>(null)
 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
@@ -113,6 +119,24 @@ class SettingsViewModel(
 
     fun restoreCategory(category: CategoryEntity) {
         viewModelScope.launch { categories.setArchived(category, false) }
+    }
+
+    /** Look up the unused [type] categories (fresh from the DB) and ask before deleting them. */
+    fun askClearUnused(type: CategoryType, title: String) {
+        viewModelScope.launch {
+            val unused = categories.unused(type)
+            pendingClearUnused.value = if (unused.isEmpty()) null else PendingClearUnused(type, title, unused)
+        }
+    }
+
+    fun confirmClearUnused() {
+        val pending = pendingClearUnused.value ?: return
+        pendingClearUnused.value = null
+        viewModelScope.launch { categories.deleteUnused(pending.type, pending.unused) }
+    }
+
+    fun cancelClearUnused() {
+        pendingClearUnused.value = null
     }
 
     fun setActivityGroup(category: CategoryEntity, group: ActivityGroup) {

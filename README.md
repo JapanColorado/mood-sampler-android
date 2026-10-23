@@ -79,7 +79,8 @@ mood and time use — unlike diaries, which oversample memorable moments.
   and in Settings; each activity's group is editable, user-added ones start in
   Other
 - Editable activity/place/company/pain-type lists: rename, regroup, reorder, archive and
-  restore, with per-item usage counts; 28 default activities, 16 default
+  restore, with per-item usage counts, plus "Clear unused" per list to delete the
+  options no sample uses; 28 default activities, 16 default
   places and 12 default pain types
 - CSV export via the share sheet; full JSON backup and restore; "Delete all
   data" (answers and prompts only — categories and settings stay) behind a
@@ -143,7 +144,8 @@ collides with a release install.
 11. History → search a note → tap a row → change the pain rating → Update →
     row updates. Delete → confirm → row gone, Home response rate unchanged.
 12. Settings → tap a category chip → usage count, ▲▼ reorder, Archive →
-    "Archived (1)" → Restore.
+    "Archived (1)" → Restore. **Clear unused (N)…** → the dialog lists only
+    options with no samples → Delete → they're gone, used ones remain.
 13. Settings → **Back up to file…** → `adb shell pm clear
     dev.russell.moodsampler.debug` → `pixi run run-debug` → onboarding appears
     (no Home flash), grant notifications, **Start sampling** → Settings →
@@ -206,8 +208,9 @@ for every version; migrations are explicit — there is no destructive fallback)
 - `sample_tag` (v9) — Claude's free-form tags per sample, lower-case.
 - `sample_device` (v8) — salted hashes of the Bluetooth devices nearby while a
   sample was answered; trains company suggestions. Not in the CSV.
-- `category` — editable activity/place/company/pain-type lists; archived, never deleted,
-  so history keeps its labels. `groupKey` (v3) is the `ActivityGroup` of an
+- `category` — editable activity/place/company/pain-type lists; a used category is
+  archived, never deleted, so history keeps its labels. Only categories no sample
+  references can be deleted ("Clear unused"). `groupKey` (v3) is the `ActivityGroup` of an
   activity. The v1→v2 migration back-fills the new default labels for existing
   installs, skipping any the user already has; v2→v3 assigns groups to the
   default activity labels and puts everything else in `OTHER`. v6→v7 archives

@@ -142,6 +142,36 @@ class DaoTest {
     }
 
     @Test
+    fun deleteUnused_keepsReferencedCategoriesAndRenumbers() = runTest {
+        val dao = db.categoryDao()
+        val repo = CategoryRepository(db)
+        fun cat(type: CategoryType, label: String, order: Int, archived: Boolean = false) =
+            CategoryEntity(type = type, label = label, sortOrder = order, isArchived = archived)
+        val work = dao.insert(cat(CategoryType.ACTIVITY, "Work", 1))
+        dao.insert(cat(CategoryType.ACTIVITY, "Idle", 2))
+        val music = dao.insert(cat(CategoryType.ACTIVITY, "Music", 3))
+        dao.insert(cat(CategoryType.ACTIVITY, "Old", 4, archived = true))
+        val home = dao.insert(cat(CategoryType.LOCATION, "Home", 1))
+        dao.insert(cat(CategoryType.LOCATION, "Cafe", 2))
+        val promptId = db.scheduledPromptDao().insert(prompt(1_000, PromptStatus.NOTIFIED))
+        SampleRepository(db, PhotoStore(ApplicationProvider.getApplicationContext())).saveAnswer(
+            SampleEntity(promptId = promptId, valence = 6, arousal = 6, locationId = home, socialId = null, note = null, createdAtEpochMs = 0),
+            listOf(work, music), answeredAtMs = 1_100,
+        )
+
+        val unused = repo.unused(CategoryType.ACTIVITY)
+        assertThat(unused.map { it.label }).containsExactly("Idle", "Old").inOrder()
+        assertThat(repo.deleteUnused(CategoryType.ACTIVITY, unused)).isEqualTo(2)
+
+        val left = dao.byType(CategoryType.ACTIVITY)
+        assertThat(left.map { it.label to it.sortOrder }).containsExactly("Work" to 1, "Music" to 2).inOrder()
+        // Other types untouched, and a stale list can't delete a category that has since been used.
+        assertThat(dao.byType(CategoryType.LOCATION).map { it.label }).containsExactly("Home", "Cafe")
+        assertThat(repo.deleteUnused(CategoryType.LOCATION, dao.byType(CategoryType.LOCATION))).isEqualTo(1)
+        assertThat(dao.byType(CategoryType.LOCATION).map { it.label }).containsExactly("Home")
+    }
+
+    @Test
     fun markSkipped_onlyFromLivePrompts() = runTest {
         val dao = db.scheduledPromptDao()
         val live = dao.insert(prompt(1_000, PromptStatus.NOTIFIED))

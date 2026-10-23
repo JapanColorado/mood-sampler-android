@@ -14,7 +14,10 @@ data class CategoryGroup(
     val archived: List<CategoryEntity> = emptyList(),
 )
 
-/** Editing operations on the category lists. Categories are archived, never deleted. */
+/**
+ * Editing operations on the category lists. Used categories are archived, never deleted,
+ * so history keeps its labels; only ones no sample references can be deleted.
+ */
 class CategoryRepository(private val db: AppDatabase) {
 
     private val dao get() = db.categoryDao()
@@ -80,6 +83,17 @@ class CategoryRepository(private val db: AppDatabase) {
             renumber(category.type)  // a restored item goes to the end of the active list
         }
     }
+
+    /** Categories of [type], archived included, that no sample references. */
+    suspend fun unused(type: CategoryType): List<CategoryEntity> = dao.unusedByType(type)
+
+    /** Permanently delete those of [categories] still unused by any sample; returns how many went. */
+    suspend fun deleteUnused(type: CategoryType, categories: List<CategoryEntity>): Int =
+        db.withTransaction {
+            val deleted = dao.deleteUnused(categories.map { it.id })
+            renumber(type)
+            deleted
+        }
 
     /** Move an active category one slot up (delta = -1) or down (+1) within its type. */
     suspend fun move(category: CategoryEntity, delta: Int) {
