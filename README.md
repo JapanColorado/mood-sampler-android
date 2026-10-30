@@ -69,8 +69,9 @@ mood and time use — unlike diaries, which oversample memorable moments.
   A device seen with ≥ 2 past answers, ≥ 60 % of them with one company option
   and clearly above that option's usual share, votes for it; the winner is
   pre-selected if the user hasn't picked one. Own earbuds and other ever-present
-  devices therefore say nothing. With nothing informative nearby, nothing is
-  pre-selected. The company row always shows every option
+  devices therefore say nothing. With nothing informative nearby, new captures
+  stay on the default, **Alone** (edits of old answers get no default; a renamed
+  or archived Alone means none either). The company row always shows every option
 - Simpler place picking: the row shows only the suggested place, the most-used
   places and the current selection; **More…** reveals the full list. With no
   fix nothing is pre-selected (a stale guess would bias the data)
@@ -172,7 +173,7 @@ collides with a release install.
     few prompts with a Bluetooth device (watch, earbuds, speaker) close by and
     the same company, plus a couple with a different company away from it →
     the next prompt near that device pre-selects that company. With Bluetooth off the caption
-    says "Bluetooth off" and nothing is pre-selected.
+    says "Bluetooth off" and Alone stays pre-selected; tapping Alone clears it.
 19. With no Claude key, fire a test prompt → the Manual section is open and a
     caption points to Settings; the form saves as before. Settings → *Fill in
     with Claude* → paste a key → "API key saved (…abcd)"; pick Haiku 5.5.
@@ -183,7 +184,10 @@ collides with a release install.
     tags appear, Manual opens with Home / Reading / Partner picked, and pain
     types show Headache. Remove a tag, tap valence and energy, Save → History
     shows the summary and `#tags`; CSV `pain_types`, `summary`, `tags` are filled.
-21. Pick a place by hand, then **Fill in again** → your place stays. Airplane
+21. Fire a test prompt, say "Having dinner, my sister just told a great joke",
+    **Fill in with Claude** → the With row moves from Alone to Family. On the next
+    one, say "Worried about my mom, she hasn't texted back" → it stays on Alone.
+    Pick a place by hand, then **Fill in again** → your place stays. Airplane
     mode → **Fill in with Claude** → "Couldn't reach Claude…"; the form still
     saves. Settings → Remove the key → next prompt is back to manual.
 

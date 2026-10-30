@@ -151,6 +151,8 @@ internal fun CaptureForm(
     companyStatus: CompanyStatus,
     /** Company matched from nearby devices; preselected until the user touches the company row. */
     suggestedSocialId: Long?,
+    /** Company shown as picked while nothing else has set it; null (History edits) means none. */
+    defaultSocialId: Long? = null,
     /** Null when no Claude API key is set: the form is filled by hand. */
     onAssist: AssistAction?,
     saveLabel: String,
@@ -187,6 +189,8 @@ internal fun CaptureForm(
     var addingType by rememberSaveable { mutableStateOf<CategoryType?>(null) }
     val scope = rememberCoroutineScope()
     val ready = valence != UNPICKED && arousal != UNPICKED
+    // Kept out of socialId so the scan and Claude still replace it, and aren't told it as a guess.
+    val pickedSocialId = socialId ?: defaultSocialId.takeIf { !companyTouched }
 
     // The fix may land after the form is on screen; only fill an untouched, empty place.
     LaunchedEffect(suggestedLocationId) {
@@ -322,8 +326,8 @@ internal fun CaptureForm(
             ManualSection(
                 open = manualOpen,
                 onToggle = { manualOpen = !manualOpen },
-                picked = remember(locationId, activityIds.toList(), socialId, locations, activities, socials) {
-                    pickedSummary(locationId, activityIds, socialId, locations + activities + socials)
+                picked = remember(locationId, activityIds.toList(), pickedSocialId, locations, activities, socials) {
+                    pickedSummary(locationId, activityIds, pickedSocialId, locations + activities + socials)
                 },
             ) {
                 PlaceSection(
@@ -341,9 +345,9 @@ internal fun CaptureForm(
                     activitiesTouched = true
                     if (!activityIds.remove(id)) activityIds.add(id)
                 }
-                CompanySection(socials, socialId, companyStatus, onOther = { addingType = CategoryType.SOCIAL }) {
+                CompanySection(socials, pickedSocialId, companyStatus, onOther = { addingType = CategoryType.SOCIAL }) {
                     companyTouched = true
-                    socialId = if (socialId == it) null else it
+                    socialId = if (pickedSocialId == it) null else it
                 }
             }
         }
@@ -361,7 +365,7 @@ internal fun CaptureForm(
                         painTypeIds = painTypeIds.toList(),
                         activityIds = activityIds.toList(),
                         locationId = locationId,
-                        socialId = socialId,
+                        socialId = pickedSocialId,
                         note = note,
                         summary = summary,
                         tags = tags.toList(),

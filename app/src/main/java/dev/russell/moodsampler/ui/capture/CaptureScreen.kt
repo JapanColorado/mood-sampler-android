@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.russell.moodsampler.data.db.DefaultCategories
 
 @Composable
 fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
@@ -62,6 +63,7 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
                 suggestedLocationId = suggested,
                 companyStatus = companyStatus,
                 suggestedSocialId = suggestedSocial,
+                defaultSocialId = socials.firstOrNull { it.label == DefaultCategories.ALONE }?.id,
                 onAssist = if (hasAssist) viewModel::assist else null,
                 saveLabel = "Save",
                 onSave = viewModel::save,

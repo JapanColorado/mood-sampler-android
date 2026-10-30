@@ -50,12 +50,14 @@ object AssistPrompt {
     const val SYSTEM = """You help someone fill in a mood-journal entry. The app prompted them at a random moment, and they described what they're doing, thinking and feeling, sometimes with a photo. Turn that into the entry's fields.
 
 - summary: one short sentence (at most 20 words) in the first person, saying what they're doing and how they feel. Plain and factual, no advice.
-- place, activities, company, pain_types: choose from the listed options and copy their labels exactly. Use a new label only when nothing listed fits and the narration or photo clearly says so; keep it to 1–3 words in the same style as the listed ones. Leave a field null or empty when it isn't stated or clearly implied. Don't guess.
-- place is where they are right now. activities can be several things they're doing at once. company is who they're with right now ("Alone" if they say so).
+- place, activities, company, pain_types: choose from the listed options and copy their labels exactly. Use a new label only when nothing listed fits and the narration or photo clearly says so; keep it to 1–3 words in the same style as the listed ones. Leave a field null or empty when it isn't stated or clearly implied. Don't guess. (company has its own, looser rule below.)
+- place is where they are right now. activities can be several things they're doing at once.
+- company is who they're with right now. Fill it on any hint in the narration or photo, even in passing ("my wife just said", "dinner with the kids", people sharing the scene in a photo), using the closest option (a sister is family, a boss is a coworker). Use "Alone" if they suggest nobody is around. Someone they're only thinking about or texting doesn't count. If they're with several people, choose who they're mainly with. Leave it null only when there's no hint either way.
 - pain_types: only when they mention physical pain or discomfort.
 - tags: 0–5 short lowercase tags for notable themes the other fields don't already capture (for example "deadline", "coffee", "rain", "argument").
 - Never rate mood, energy or pain intensity; the person does that themselves.
-- A place or company marked as a phone guess came from GPS or Bluetooth: keep it unless the narration says otherwise."""
+- A place marked as a phone guess came from GPS: keep it unless the narration says otherwise.
+- A company marked as a phone guess came from Bluetooth and is only a weak signal: replace it on any hint from the narration or photo."""
 
     // Declared before SCHEMA, which reads them during object initialisation.
     private val NULLABLE_STRING = mapOf("anyOf" to listOf(mapOf("type" to "string"), mapOf("type" to "null")))

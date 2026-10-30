@@ -58,8 +58,11 @@ object DefaultCategories {
         "Park / nature", "Bed", "Doctor / clinic", "Bar", "Library",
     )
 
+    /** Preselected on new captures. */
+    const val ALONE = "Alone"
+
     val SOCIAL = listOf(
-        "Alone", "Partner", "Family", "Friends", "Coworkers", "Strangers",
+        ALONE, "Partner", "Family", "Friends", "Coworkers", "Strangers",
     )
 
     /** Pain types (schema v9); the 8→9 migration adds them for existing installs. */
