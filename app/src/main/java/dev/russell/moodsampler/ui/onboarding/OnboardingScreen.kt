@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,15 +19,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,10 +43,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import dev.russell.moodsampler.ui.components.Aside
+import dev.russell.moodsampler.ui.components.JournalCard
+import dev.russell.moodsampler.ui.dashboard.charts.MoodChartColors
 import dev.russell.moodsampler.ui.rememberBluetoothPermission
 import dev.russell.moodsampler.ui.rememberLocationPermission
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,7 +68,7 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     var finishing by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         HorizontalPager(pager, Modifier.weight(1f)) { page ->
             Column(
                 Modifier
@@ -112,7 +120,7 @@ private fun PageDots(current: Int) {
                     .clip(CircleShape)
                     .background(
                         if (i == current) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant
+                        else MaterialTheme.colorScheme.outlineVariant
                     )
             )
         }
@@ -121,7 +129,8 @@ private fun PageDots(current: Int) {
 
 @Composable
 private fun WhyPage() {
-    Text("Random moments, honest picture", style = MaterialTheme.typography.headlineMedium)
+    ScatteredDay()
+    Text("Random moments, honest picture", style = MaterialTheme.typography.displaySmall)
     Text(
         "Mood Sampler asks how you feel a few times a day, at random moments you " +
             "can't predict. Each check-in takes about 15 seconds: two quick 0–10 mood " +
@@ -134,13 +143,37 @@ private fun WhyPage() {
             "describe your life.",
         style = MaterialTheme.typography.bodyLarge,
     )
-    Text(
+    Aside(
         "Prompts expire after a while and count as missed — that's fine and expected. " +
             "The app never shows when the next one is coming; knowing would change the answer.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
+
+/** A day as a hairline with moments scattered along it, some high, some low: the idea in one picture. */
+@Composable
+private fun ScatteredDay() {
+    val colors = listOf(2.0, 7.0, 5.0, 9.0, 3.0, 8.0, 6.0).map { MoodChartColors.valenceAt(it) }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Canvas(Modifier.fillMaxWidth().height(96.dp)) {
+        val mid = size.height / 2
+        drawLine(line, Offset(0f, mid), Offset(size.width, mid), strokeWidth = 1.dp.toPx())
+        colors.forEachIndexed { i, color ->
+            val (x, y) = SCATTER[i]
+            drawCircle(color, radius = 11.dp.toPx(), center = Offset(size.width * x, size.height * y))
+        }
+    }
+}
+
+/** Dot positions as fractions of the picture: hand-placed to look unplanned. */
+private val SCATTER = listOf(
+    0.05f to 0.72f,
+    0.19f to 0.3f,
+    0.34f to 0.55f,
+    0.48f to 0.14f,
+    0.63f to 0.8f,
+    0.8f to 0.24f,
+    0.95f to 0.5f,
+)
 
 @Composable
 private fun PermissionsPage() {
@@ -159,7 +192,7 @@ private fun PermissionsPage() {
         notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    Text("Let prompts reach you", style = MaterialTheme.typography.headlineMedium)
+    Text("Let prompts reach you", style = MaterialTheme.typography.displaySmall)
     Text(
         "Prompts arrive as notifications. Without them nothing gets collected.",
         style = MaterialTheme.typography.bodyLarge,
@@ -218,38 +251,39 @@ private fun PermissionCard(
     actionLabel: String,
     onRequest: () -> Unit,
 ) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (granted) grantedText else missingText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (granted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-            )
-            if (!granted) OutlinedButton(onClick = onRequest) { Text(actionLabel) }
+    JournalCard(spacing = 8.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            if (granted) {
+                Icon(Icons.Filled.CheckCircle, contentDescription = "Granted", tint = MaterialTheme.colorScheme.secondary)
+            }
         }
+        Text(
+            if (granted) grantedText else missingText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!granted) FilledTonalButton(onClick = onRequest) { Text(actionLabel) }
     }
 }
 
 @Composable
 private fun SchedulePage(viewModel: OnboardingViewModel) {
     val settings by viewModel.settings.collectAsState()
-    Text("Your sampling day", style = MaterialTheme.typography.headlineMedium)
+    Text("Your sampling day", style = MaterialTheme.typography.displaySmall)
     Text(
         "Choose how many prompts you want and the hours you're awake. Each prompt " +
             "lands at a random moment inside its own slice of the day. You can change " +
             "this any time in Settings.",
         style = MaterialTheme.typography.bodyLarge,
     )
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            SamplingControls(
-                settings = settings,
-                onWindowsPerDay = viewModel::setWindowsPerDay,
-                onDayStart = viewModel::setDayStart,
-                onDayEnd = viewModel::setDayEnd,
-            )
-        }
+    JournalCard {
+        SamplingControls(
+            settings = settings,
+            onWindowsPerDay = viewModel::setWindowsPerDay,
+            onDayStart = viewModel::setDayStart,
+            onDayEnd = viewModel::setDayEnd,
+        )
     }
     Spacer(Modifier.height(8.dp))
 }

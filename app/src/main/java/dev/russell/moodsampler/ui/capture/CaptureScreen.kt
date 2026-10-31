@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,11 +78,11 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
 @Composable
 private fun InfoScreen(title: String, body: String, onDone: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        Modifier.fillMaxSize().statusBarsPadding().padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Text(title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         Text(body, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
         TextButton(onClick = onDone) { Text("Close") }
     }

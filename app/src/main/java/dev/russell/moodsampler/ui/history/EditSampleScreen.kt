@@ -2,6 +2,8 @@ package dev.russell.moodsampler.ui.history
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.russell.moodsampler.ui.capture.CaptureForm
 import dev.russell.moodsampler.ui.capture.CompanyStatus
 import dev.russell.moodsampler.ui.capture.LocationStatus
+import dev.russell.moodsampler.ui.components.Aside
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,8 +43,10 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("Edit entry") },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
@@ -89,13 +95,10 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                     onSave = viewModel::save,
                     onAddOption = viewModel::addOption,
                     onSkip = null,
-                    modifier = Modifier.padding(padding),
+                    modifier = Modifier.padding(padding).consumeWindowInsets(padding),
+                    moodTint = false,
                     header = {
-                        Text(
-                            "Editing a past answer — try to recall the moment itself rather than how you feel now.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Aside("Editing a past answer — try to recall the moment itself rather than how you feel now.")
                     },
                 )
             }

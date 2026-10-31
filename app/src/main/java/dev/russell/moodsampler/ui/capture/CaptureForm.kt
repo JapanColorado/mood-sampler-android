@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,14 +12,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -40,21 +44,22 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +77,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -79,12 +86,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import dev.russell.moodsampler.appGraph
 import dev.russell.moodsampler.data.MoodScale
 import dev.russell.moodsampler.data.PainScale
@@ -94,7 +101,14 @@ import dev.russell.moodsampler.data.claude.ClaudeException
 import dev.russell.moodsampler.data.db.CategoryEntity
 import dev.russell.moodsampler.data.db.CategoryType
 import dev.russell.moodsampler.data.db.byActivityGroup
+import dev.russell.moodsampler.ui.components.ActionChip
+import dev.russell.moodsampler.ui.components.Aside
+import dev.russell.moodsampler.ui.components.JournalCard
+import dev.russell.moodsampler.ui.components.OptionChip
+import dev.russell.moodsampler.ui.components.Rule
+import dev.russell.moodsampler.ui.components.moodWash
 import dev.russell.moodsampler.ui.dashboard.charts.MoodChartColors
+import dev.russell.moodsampler.ui.theme.AsideStyle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -161,7 +175,9 @@ internal fun CaptureForm(
     onAddOption: suspend (CategoryType, String) -> Long?,
     onSkip: ((reason: String) -> Unit)?,
     modifier: Modifier = Modifier,
-    header: @Composable () -> Unit = { Text("Right now…", style = MaterialTheme.typography.headlineMedium) },
+    /** Tint the page with the picked valence; off for History edits, which sit under a top bar. */
+    moodTint: Boolean = true,
+    header: @Composable () -> Unit = { Text("Right now…", style = MaterialTheme.typography.displaySmall) },
 ) {
     // Scale positions, UNPICKED until tapped (rememberSaveable has no nullable Int state).
     var valence by rememberSaveable { mutableIntStateOf(initial.valence ?: UNPICKED) }
@@ -245,7 +261,10 @@ internal fun CaptureForm(
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    // Once rated, the valence colors the page. Never before: it mustn't lead the answer.
+    val wash = if (moodTint && valence != UNPICKED) MoodChartColors.valenceAt(valence.toDouble()) else Color.Transparent
+
+    Column(modifier.fillMaxSize().moodWash(wash).statusBarsPadding().imePadding()) {
         Column(
             Modifier
                 .weight(1f)
@@ -279,45 +298,42 @@ internal fun CaptureForm(
                 },
             )
 
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                TapScale(
+                    title = "Valence",
+                    range = MoodScale.MIN..MoodScale.MAX,
+                    value = valence.takeIf { it != UNPICKED },
+                    colors = (MoodScale.MIN..MoodScale.MAX).map { MoodChartColors.valenceAt(it.toDouble()) },
+                    lowAnchor = "Awful",
+                    highAnchor = "Great",
+                    onPick = { valence = it },
+                )
+                Rule()
+                TapScale(
+                    title = "Energy",
+                    range = MoodScale.MIN..MoodScale.MAX,
+                    value = arousal.takeIf { it != UNPICKED },
+                    colors = (MoodScale.MIN..MoodScale.MAX).map { MoodChartColors.arousalAt(it.toDouble()) },
+                    lowAnchor = "Drained",
+                    highAnchor = "Wired",
+                    onPick = { arousal = it },
+                )
+                Rule()
+                Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     TapScale(
-                        title = "Valence",
-                        range = MoodScale.MIN..MoodScale.MAX,
-                        value = valence.takeIf { it != UNPICKED },
-                        color = MoodChartColors.valence(),
-                        lowAnchor = "Awful",
-                        highAnchor = "Great",
-                        onPick = { valence = it },
+                        title = "Pain",
+                        range = PainScale.MIN..PainScale.MAX,
+                        value = pain,
+                        colors = (PainScale.MIN..PainScale.MAX).map { MoodChartColors.painAt(it.toDouble()) },
+                        lowAnchor = "None",
+                        highAnchor = "Worst imaginable",
+                        valueCaption = PainScale::descriptor,
+                        onPick = { pain = it },
                     )
-                    TapScale(
-                        title = "Energy",
-                        range = MoodScale.MIN..MoodScale.MAX,
-                        value = arousal.takeIf { it != UNPICKED },
-                        color = MoodChartColors.arousal(),
-                        lowAnchor = "Drained",
-                        highAnchor = "Wired",
-                        onPick = { arousal = it },
-                    )
-                    Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TapScale(
-                            title = "Pain",
-                            range = PainScale.MIN..PainScale.MAX,
-                            value = pain,
-                            color = MoodChartColors.pain(),
-                            lowAnchor = "None",
-                            highAnchor = "Worst imaginable",
-                            valueLabel = { "$it · ${PainScale.descriptor(it)}" },
-                            onPick = { pain = it },
-                        )
-                        if (pain > 0 || painTypeIds.isNotEmpty()) {
-                            PainTypeSection(painTypes, painTypeIds, onOther = { addingType = CategoryType.PAIN }) { id ->
-                                painTypesTouched = true
-                                if (!painTypeIds.remove(id)) painTypeIds.add(id)
-                            }
+                    if (pain > 0 || painTypeIds.isNotEmpty()) {
+                        PainTypeSection(painTypes, painTypeIds, onOther = { addingType = CategoryType.PAIN }) { id ->
+                            painTypesTouched = true
+                            if (!painTypeIds.remove(id)) painTypeIds.add(id)
                         }
                     }
                 }
@@ -425,43 +441,47 @@ private val LongListSaver = listSaver<SnapshotStateList<Long>, Long>(
 )
 
 /**
- * A row of equal-width numbered cells; one tap picks a value. Cells up to the pick
- * fill with a soft tint of [color] so the row reads like a gauge.
+ * A row of equal-width numbered cells, each tinted with its own color from the scale,
+ * so the whole range is legible before you touch it; one tap picks a value, which fills
+ * solid and lifts slightly. The pick also appears large beside the title.
  */
 @Composable
 private fun TapScale(
     title: String,
     range: IntRange,
     value: Int?,
-    color: Color,
+    /** One color per value in [range]. */
+    colors: List<Color>,
     lowAnchor: String,
     highAnchor: String,
     onPick: (Int) -> Unit,
-    valueLabel: (Int) -> String = { it.toString() },
+    valueCaption: ((Int) -> String)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             if (value != null) {
-                Text(
-                    valueLabel(value),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = color,
-                )
+                if (valueCaption != null) {
+                    Text(
+                        valueCaption(value),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp, bottom = 4.dp),
+                    )
+                }
+                Text(value.toString(), style = MaterialTheme.typography.headlineMedium)
             }
         }
         Row(
             Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             range.forEach { n ->
                 ScaleCell(
                     n = n,
                     selected = n == value,
-                    filled = value != null && n < value,
-                    color = color,
+                    color = colors[n - range.first],
                     description = "$title $n",
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -482,28 +502,27 @@ private fun TapScale(
 private fun RowScope.ScaleCell(
     n: Int,
     selected: Boolean,
-    filled: Boolean,
     color: Color,
     description: String,
     onClick: () -> Unit,
 ) {
-    val background by animateColorAsState(
-        when {
-            selected -> color
-            filled -> color.copy(alpha = 0.22f)
-            else -> MaterialTheme.colorScheme.surfaceContainerHighest
-        },
-        label = "cell",
-    )
+    val idle = lerp(MaterialTheme.colorScheme.surfaceContainer, color, CELL_TINT)
+    val background by animateColorAsState(if (selected) color else idle, label = "cell")
     val content by animateColorAsState(
-        if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        if (selected) MoodChartColors.contentOn(color) else MaterialTheme.colorScheme.onSurface,
         label = "cellText",
     )
+    val lift by animateFloatAsState(if (selected) 1.14f else 1f, label = "cellLift")
     Box(
         Modifier
             .weight(1f)
-            .height(48.dp)
-            .background(background, RoundedCornerShape(10.dp))
+            .height(50.dp)
+            .zIndex(if (selected) 1f else 0f)
+            .graphicsLayer {
+                scaleX = lift
+                scaleY = lift
+            }
+            .background(background, RoundedCornerShape(9.dp))
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
@@ -516,6 +535,8 @@ private fun RowScope.ScaleCell(
         )
     }
 }
+
+private const val CELL_TINT = 0.32f
 
 @Composable
 private fun Anchor(text: String) {
@@ -556,7 +577,7 @@ private fun PlaceSection(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionLabel(Icons.Outlined.Place, "Where", locationCaption(status))
         ExpandableChips(locations, shortlist, onOther) { option ->
-            FilterChip(
+            OptionChip(
                 selected = option.id == selectedId,
                 onClick = { onSelect(option.id) },
                 label = { Text(option.label) },
@@ -588,7 +609,7 @@ private fun ActivitySection(
     }
     val visible = shortlist + activities.filter { it.id in selectedIds && it !in shortlist }
     val chip: @Composable (CategoryEntity) -> Unit = { option ->
-        FilterChip(
+        OptionChip(
             selected = option.id in selectedIds,
             onClick = { onToggle(option.id) },
             label = { Text(option.label) },
@@ -629,7 +650,7 @@ private fun CompanySection(
         SectionLabel(Icons.Outlined.Group, "With", companyCaption(status))
         ChipFlow {
             options.forEach { option ->
-                FilterChip(
+                OptionChip(
                     selected = option.id == selectedId,
                     onClick = { onSelect(option.id) },
                     label = { Text(option.label) },
@@ -668,35 +689,26 @@ private fun NarrationCard(
     onRemoveTag: (String) -> Unit,
     onClearSummary: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
+    JournalCard(Modifier.animateContentSize(), padding = PaddingValues(8.dp), spacing = 8.dp) {
+        TextField(
+            value = note,
+            onValueChange = onNoteChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Aside("What are you doing, thinking, feeling?") },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            minLines = 3,
+            maxLines = 8,
+        )
         Column(
-            Modifier.padding(16.dp).animateContentSize(),
+            Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = note,
-                onValueChange = onNoteChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("What are you doing, thinking, feeling?") },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                shape = RoundedCornerShape(16.dp),
-                minLines = 3,
-                maxLines = 8,
-                trailingIcon = dictation?.let { d ->
-                    {
-                        IconButton(onClick = d::toggle) {
-                            Icon(
-                                if (d.listening) Icons.Filled.Stop else Icons.Outlined.Mic,
-                                contentDescription = if (d.listening) "Stop dictating" else "Dictate",
-                                tint = if (d.listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                },
-            )
             dictation?.let { d ->
                 when {
                     d.listening -> Caption(d.partial.ifEmpty { "Listening…" })
@@ -707,10 +719,41 @@ private fun NarrationCard(
             if (photo != null) AttachedPhoto(photo = photo, onRetake = takePhoto, onRemove = onRemovePhoto)
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (photo == null && takePhoto != null) ExtraChip(Icons.Outlined.PhotoCamera, "Photo", takePhoto)
+                dictation?.let { d ->
+                    FilledTonalIconButton(
+                        onClick = d::toggle,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (d.listening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = if (d.listening) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) {
+                        Icon(
+                            if (d.listening) Icons.Filled.Stop else Icons.Outlined.Mic,
+                            contentDescription = if (d.listening) "Stop dictating" else "Dictate",
+                        )
+                    }
+                }
+                if (photo == null && takePhoto != null) {
+                    FilledTonalIconButton(
+                        onClick = takePhoto,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) {
+                        Icon(Icons.Outlined.PhotoCamera, contentDescription = "Add photo")
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 if (claudeAvailable) {
-                    FilledTonalButton(onClick = { askClaude?.invoke() }, enabled = askClaude != null && !assisting) {
+                    FilledTonalButton(
+                        onClick = { askClaude?.invoke() },
+                        enabled = askClaude != null && !assisting,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
                         if (assisting) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
@@ -742,8 +785,7 @@ private fun ClaudeResult(summary: String?, tags: List<String>, onRemoveTag: (Str
             Spacer(Modifier.width(8.dp))
             Text(
                 summary ?: "Tags",
-                style = MaterialTheme.typography.bodyMedium,
-                fontStyle = if (summary != null) FontStyle.Italic else FontStyle.Normal,
+                style = if (summary != null) AsideStyle else MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onClear) { Text("Clear") }
@@ -786,7 +828,7 @@ private fun PainTypeSection(
         GroupHeader("Where / what kind")
         ChipFlow {
             options.forEach { option ->
-                FilterChip(
+                OptionChip(
                     selected = option.id in selectedIds,
                     onClick = { onToggle(option.id) },
                     label = { Text(option.label) },
@@ -803,56 +845,43 @@ private fun PainTypeSection(
  */
 @Composable
 private fun ManualSection(open: Boolean, onToggle: () -> Unit, picked: String, content: @Composable () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(Modifier.animateContentSize()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClickLabel = if (open) "Collapse" else "Expand", onClick = onToggle)
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Manual", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        picked.ifEmpty { "Where, doing, with — nothing picked yet" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (open) 1 else 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Icon(
-                    if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null,
+    JournalCard(Modifier.animateContentSize(), padding = PaddingValues(0.dp), spacing = 0.dp) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = if (open) "Collapse" else "Expand", onClick = onToggle)
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Manual", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    picked.ifEmpty { "Where, doing, with — nothing picked yet" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (open) 1 else 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (open) {
-                Column(
-                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                ) { content() }
-            }
+            Icon(
+                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+            )
+        }
+        if (open) {
+            Column(
+                Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) { content() }
         }
     }
-}
-
-@Composable
-private fun ExtraChip(icon: ImageVector, label: String, onClick: () -> Unit) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(icon, contentDescription = null, Modifier.size(AssistChipDefaults.IconSize)) },
-    )
 }
 
 /** Save pinned under the scrolling content, with the skip path beside it on live prompts. */
 @Composable
 private fun BottomBar(saveLabel: String, ready: Boolean, onSkip: (() -> Unit)?, onSave: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+    Column {
+        Rule()
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -888,13 +917,13 @@ private fun ExpandableChips(
 
 @Composable
 private fun MoreChip(expanded: Boolean, onClick: () -> Unit) {
-    AssistChip(onClick = onClick, label = { Text(if (expanded) "Fewer" else "More…") })
+    ActionChip(onClick = onClick, label = { Text(if (expanded) "Fewer" else "More…") })
 }
 
 /** Opens [AddOptionDialog] to name an option that isn't in the list yet. */
 @Composable
 private fun OtherChip(onClick: () -> Unit) {
-    AssistChip(
+    ActionChip(
         onClick = onClick,
         label = { Text("Other…") },
         leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null, Modifier.size(AssistChipDefaults.IconSize)) },
@@ -1001,7 +1030,7 @@ private fun SkipDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 private fun ReasonChips(selected: String?, onSelect: (String) -> Unit) {
     ChipFlow {
         SkipReason.CAPTURE_CHOICES.forEach { (code, label) ->
-            FilterChip(selected = code == selected, onClick = { onSelect(code) }, label = { Text(label) })
+            OptionChip(selected = code == selected, onClick = { onSelect(code) }, label = { Text(label) })
         }
     }
 }

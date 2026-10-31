@@ -5,10 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -20,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.russell.moodsampler.data.settings.AppSettings
 import java.time.LocalTime
@@ -65,19 +72,20 @@ fun SamplingControls(
 internal fun Stepper(label: String, value: Int, onChange: (Int) -> Unit, range: IntRange, step: Int = 1) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(
+        FilledTonalIconButton(
             onClick = { onChange((value - step).coerceIn(range)) },
             enabled = value - step >= range.first,
-        ) { Text("−") }
+        ) { Icon(Icons.Filled.Remove, contentDescription = "Decrease $label") }
         Text(
             "$value",
-            Modifier.padding(horizontal = 12.dp),
-            style = MaterialTheme.typography.titleMedium,
+            Modifier.widthIn(min = 44.dp).padding(horizontal = 4.dp),
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
         )
-        OutlinedButton(
+        FilledTonalIconButton(
             onClick = { onChange((value + step).coerceIn(range)) },
             enabled = value + step <= range.last,
-        ) { Text("+") }
+        ) { Icon(Icons.Filled.Add, contentDescription = "Increase $label") }
     }
 }
 
@@ -114,7 +122,7 @@ internal fun TimeSettingRow(
     var showPicker by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(onClick = { showPicker = true }) {
+        FilledTonalButton(onClick = { showPicker = true }) {
             val time = LocalTime.ofSecondOfDay(minutes * 60L).toString()
             Text(if (nextDay) "$time (next day)" else time)
         }

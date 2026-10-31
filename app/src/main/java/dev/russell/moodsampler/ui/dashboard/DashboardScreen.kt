@@ -6,21 +6,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.russell.moodsampler.ui.components.Aside
+import dev.russell.moodsampler.ui.components.BigStat
+import dev.russell.moodsampler.ui.components.Eyebrow
+import dev.russell.moodsampler.ui.components.JournalCard
+import dev.russell.moodsampler.ui.components.PillToggle
+import dev.russell.moodsampler.ui.components.ScreenTitle
 import dev.russell.moodsampler.ui.dashboard.charts.CategoryBars
 import dev.russell.moodsampler.ui.dashboard.charts.HourOfDayChart
 import dev.russell.moodsampler.ui.dashboard.charts.MoodTimeSeriesChart
@@ -36,36 +38,32 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
     Column(
         Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text("Insights", style = MaterialTheme.typography.headlineMedium)
+        ScreenTitle("Insights")
 
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            DashboardRange.entries.forEachIndexed { index, r ->
-                SegmentedButton(
-                    selected = range == r,
-                    onClick = { viewModel.range.value = r },
-                    shape = SegmentedButtonDefaults.itemShape(index, DashboardRange.entries.size),
-                ) { Text(r.label) }
-            }
-        }
+        PillToggle(
+            options = DashboardRange.entries,
+            selected = range,
+            label = { it.label },
+            onSelect = { viewModel.range.value = it },
+        )
 
         if (data.isEmpty) {
-            Text(
+            Aside(
                 "No data in this range yet. Once prompts start landing, your mood " +
                     "patterns will show up here.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             return@Column
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            StatTile("${data.responseRate ?: 0}%", "response rate")
-            StatTile("${data.answered}", "samples")
-            StatTile("${data.missed}", "missed")
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            BigStat("${data.responseRate ?: 0}%", "response rate", Modifier.weight(1f))
+            BigStat("${data.answered}", "samples", Modifier.weight(1f))
+            BigStat("${data.missed}", "missed", Modifier.weight(1f))
         }
 
         Section("Mood over time", "Daily means; 0–10") {
@@ -93,17 +91,14 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
         }
 
         // Breakdown measure: drives the hour chart and the three category sections.
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Break down by", style = MaterialTheme.typography.titleSmall)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                Measure.entries.forEachIndexed { index, m ->
-                    SegmentedButton(
-                        selected = measure == m,
-                        onClick = { viewModel.measure.value = m },
-                        shape = SegmentedButtonDefaults.itemShape(index, Measure.entries.size),
-                    ) { Text(m.label) }
-                }
-            }
+        Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Eyebrow("Break down by")
+            PillToggle(
+                options = Measure.entries,
+                selected = measure,
+                label = { it.label },
+                onSelect = { viewModel.measure.value = it },
+            )
         }
 
         // `data.measure` (not `measure`) so charts and labels flip together once the recompute lands.
@@ -134,18 +129,16 @@ private fun noMeasureText(measure: Measure) =
 
 @Composable
 private fun Section(title: String, subtitle: String, content: @Composable () -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            content()
+    JournalCard(spacing = 16.dp) {
+        Column {
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        content()
     }
 }
 
@@ -156,13 +149,5 @@ private fun CategoryBarsOrPlaceholder(rows: List<CategoryMood>, measure: Measure
 
 @Composable
 private fun SectionPlaceholder(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
-private fun StatTile(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.headlineSmall)
-        Text(label, style = MaterialTheme.typography.labelMedium)
-    }
+    Aside(text)
 }

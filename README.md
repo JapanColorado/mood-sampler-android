@@ -14,6 +14,11 @@ that were around last time. Over weeks this builds a statistically representativ
 mood and time use — unlike diaries, which oversample memorable moments.
 
 - Kotlin + Jetpack Compose (Material 3), single module, manual DI
+- Its own "warm journal" design rather than wallpaper colors: paper and ink palettes,
+  and [Fraunces](https://github.com/undercasetype/Fraunces) and
+  [Figtree](https://github.com/erikdkennedy/figtree) type (SIL OFL; licenses in
+  `app/src/main/assets/licenses/`). `res/font/` holds Latin subsets with only the
+  weight axis left variable (Fraunces pinned to `SOFT=100 WONK=0 opsz=72`)
 - minSdk 31 (Android 12+), target/compile SDK 35
 - Stratified random schedule: waking hours split into N equal windows, one
   uniform-random prompt per window (N and hours configurable)

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,18 +22,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +54,11 @@ import dev.russell.moodsampler.data.claude.ClaudeModel
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.russell.moodsampler.ui.capture.GroupHeader
+import dev.russell.moodsampler.ui.components.ActionChip
+import dev.russell.moodsampler.ui.components.Eyebrow
+import dev.russell.moodsampler.ui.components.JournalCard
+import dev.russell.moodsampler.ui.components.Rule
+import dev.russell.moodsampler.ui.components.ScreenTitle
 import dev.russell.moodsampler.ui.rememberBluetoothPermission
 import dev.russell.moodsampler.ui.rememberLocationPermission
 import dev.russell.moodsampler.data.CategoryGroup
@@ -92,38 +94,39 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     Column(
         Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        ScreenTitle("Settings")
 
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Sampling", style = MaterialTheme.typography.titleMedium)
-                SamplingControls(
-                    settings = settings,
-                    onWindowsPerDay = viewModel::setWindowsPerDay,
-                    onDayStart = viewModel::setDayStart,
-                    onDayEnd = viewModel::setDayEnd,
-                )
-                Stepper(
-                    label = "Prompt expires after (min)",
-                    value = settings.expiryMinutes,
-                    onChange = viewModel::setExpiryMinutes,
-                    range = 5..120,
-                    step = 5,
-                )
-                Text(
-                    "Changing these regenerates the upcoming random schedule.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        GroupLabel("Sampling")
+        JournalCard {
+            SamplingControls(
+                settings = settings,
+                onWindowsPerDay = viewModel::setWindowsPerDay,
+                onDayStart = viewModel::setDayStart,
+                onDayEnd = viewModel::setDayEnd,
+            )
+            Stepper(
+                label = "Prompt expires after (min)",
+                value = settings.expiryMinutes,
+                onChange = viewModel::setExpiryMinutes,
+                range = 5..120,
+                step = 5,
+            )
+            Text(
+                "Changing these regenerates the upcoming random schedule.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         TimeZoneCard()
 
+        GroupLabel("Capture helpers")
         LocationCard(enabled = settings.autoLocation, onToggle = viewModel::setAutoLocation)
         CompanyScanCard(enabled = settings.autoCompany, onToggle = viewModel::setAutoCompany)
         ClaudeCard(
@@ -134,59 +137,58 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
             onModel = viewModel::setClaudeModel,
         )
 
+        GroupLabel("Your lists")
         CategoryEditorCard("Activities", CategoryType.ACTIVITY, categoryGroups, usage, viewModel)
         CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
         CategoryEditorCard("Company", CategoryType.SOCIAL, categoryGroups, usage, viewModel)
         CategoryEditorCard("Pain types", CategoryType.PAIN, categoryGroups, usage, viewModel)
 
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Data", style = MaterialTheme.typography.titleMedium)
-                Button(onClick = {
-                    viewModel.exportCsv { uri ->
-                        val send = Intent(Intent.ACTION_SEND)
-                            .setType("text/csv")
-                            .putExtra(Intent.EXTRA_STREAM, uri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        context.startActivity(
-                            Intent.createChooser(send, "Export mood samples")
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                }) { Text("Export all samples as CSV") }
-                Text(
-                    "Includes missed prompts (empty rows) so response rates stay honest.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        backupLauncher.launch("moodsampler-backup-${java.time.LocalDate.now()}.json")
-                    }) { Text("Back up to file…") }
-                    OutlinedButton(onClick = {
-                        // Pickers often mislabel .json files, so accept the usual suspects.
-                        restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
-                    }) { Text("Restore from file…") }
+        GroupLabel("Data")
+        JournalCard {
+            Button(onClick = {
+                viewModel.exportCsv { uri ->
+                    val send = Intent(Intent.ACTION_SEND)
+                        .setType("text/csv")
+                        .putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.startActivity(
+                        Intent.createChooser(send, "Export mood samples")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
                 }
-                Text(
-                    "A backup holds every prompt, answer, category and sampling setting. " +
-                        "Restoring replaces everything on this phone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                HorizontalDivider()
-                OutlinedButton(
-                    onClick = viewModel::askDeleteAll,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                ) { Text("Delete all data…") }
-                Text(
-                    "Removes every answer and prompt. Your category lists and sampling " +
-                        "settings stay. Back up first if you might want the data later.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            }) { Text("Export all samples as CSV") }
+            Text(
+                "Includes missed prompts (empty rows) so response rates stay honest.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    backupLauncher.launch("moodsampler-backup-${java.time.LocalDate.now()}.json")
+                }) { Text("Back up to file…") }
+                OutlinedButton(onClick = {
+                    // Pickers often mislabel .json files, so accept the usual suspects.
+                    restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
+                }) { Text("Restore from file…") }
             }
+            Text(
+                "A backup holds every prompt, answer, category and sampling setting. " +
+                    "Restoring replaces everything on this phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Rule()
+            OutlinedButton(
+                onClick = viewModel::askDeleteAll,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            ) { Text("Delete all data…") }
+            Text(
+                "Removes every answer and prompt. Your category lists and sampling " +
+                    "settings stay. Back up first if you might want the data later.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         ExactAlarmCard()
@@ -266,6 +268,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
     }
 }
 
+@Composable
+private fun GroupLabel(text: String) {
+    Eyebrow(text, Modifier.padding(top = 14.dp, start = 4.dp))
+}
+
 /**
  * Read-only: the schedule always follows the phone's zone (see
  * [dev.russell.moodsampler.scheduling.DeviceClock]). Re-read on resume
@@ -278,20 +285,18 @@ private fun TimeZoneCard() {
         zone = ZoneId.systemDefault()
         onPauseOrDispose { }
     }
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Time zone", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "${zone.getDisplayName(TextStyle.FULL, Locale.getDefault())} (${zone.id})",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                "Follows the phone's time zone. Day start and end are local times, " +
-                    "and the upcoming schedule is redrawn automatically if the zone changes.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    JournalCard(spacing = 8.dp) {
+        Text("Time zone", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "${zone.getDisplayName(TextStyle.FULL, Locale.getDefault())} (${zone.id})",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            "Follows the phone's time zone. Day start and end are local times, " +
+                "and the upcoming schedule is redrawn automatically if the zone changes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -299,27 +304,25 @@ private fun TimeZoneCard() {
 @Composable
 private fun LocationCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     val permission = rememberLocationPermission()
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Record location with each answer", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                Switch(checked = enabled, onCheckedChange = onToggle)
-            }
+    JournalCard(spacing = 8.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Record location with each answer", Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.titleLarge)
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        Text(
+            "One fix per answer, only while the capture screen is open — no background tracking. " +
+                "Used to pre-select your place from where you answered before. " +
+                "Never leaves the phone except in your own exports.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (enabled && !permission.granted) {
             Text(
-                "One fix per answer, only while the capture screen is open — no background tracking. " +
-                    "Used to pre-select your place from where you answered before. " +
-                    "Never leaves the phone except in your own exports.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Location permission is off, so nothing is recorded.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
             )
-            if (enabled && !permission.granted) {
-                Text(
-                    "Location permission is off, so nothing is recorded.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                OutlinedButton(onClick = permission.request) { Text("Allow location") }
-            }
+            OutlinedButton(onClick = permission.request) { Text("Allow location") }
         }
     }
 }
@@ -328,28 +331,26 @@ private fun LocationCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
 @Composable
 private fun CompanyScanCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     val permission = rememberBluetoothPermission()
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Suggest company from nearby devices", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                Switch(checked = enabled, onCheckedChange = onToggle)
-            }
+    JournalCard(spacing = 8.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Suggest company from nearby devices", Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.titleLarge)
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        Text(
+            "A few-second Bluetooth scan per answer, only while the capture screen is open. " +
+                "Devices that keep showing up when you pick the same company (a partner's watch, " +
+                "a friend's earbuds, the family car) pre-select it next time. Only scrambled device " +
+                "IDs are stored, never names or addresses, and they're left out of the CSV.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (enabled && !permission.granted) {
             Text(
-                "A few-second Bluetooth scan per answer, only while the capture screen is open. " +
-                    "Devices that keep showing up when you pick the same company (a partner's watch, " +
-                    "a friend's earbuds, the family car) pre-select it next time. Only scrambled device " +
-                    "IDs are stored, never names or addresses, and they're left out of the CSV.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Nearby-devices permission is off, so nothing is scanned.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
             )
-            if (enabled && !permission.granted) {
-                Text(
-                    "Nearby-devices permission is off, so nothing is scanned.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                OutlinedButton(onClick = permission.request) { Text("Allow nearby devices") }
-            }
+            OutlinedButton(onClick = permission.request) { Text("Allow nearby devices") }
         }
     }
 }
@@ -367,39 +368,37 @@ private fun ClaudeCard(
     onModel: (ClaudeModel) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Fill in with Claude", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Describe the moment in your own words (type or dictate) and Claude fills in place, " +
-                    "activities, company and pain types, plus a summary and tags, for you to check before " +
-                    "saving. Your mood and pain ratings stay your own. Only when you tap \"Fill in with " +
-                    "Claude\", your narration, photo, the local time and your option lists are sent to " +
-                    "Anthropic with your API key; usage is billed to that key.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (keyHint != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("API key saved (…$keyHint)", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = onClearKey) { Text("Remove") }
-                }
-            } else {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it.trim() },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Anthropic API key") },
-                    placeholder = { Text("sk-ant-…") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                    supportingText = { Text("From console.anthropic.com. Stays on this phone; never in backups.") },
-                )
-                Button(onClick = { onSaveKey(draft); draft = "" }, enabled = draft.isNotBlank()) { Text("Save key") }
+    JournalCard(spacing = 8.dp) {
+        Text("Fill in with Claude", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Describe the moment in your own words (type or dictate) and Claude fills in place, " +
+                "activities, company and pain types, plus a summary and tags, for you to check before " +
+                "saving. Your mood and pain ratings stay your own. Only when you tap \"Fill in with " +
+                "Claude\", your narration, photo, the local time and your option lists are sent to " +
+                "Anthropic with your API key; usage is billed to that key.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (keyHint != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("API key saved (…$keyHint)", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                TextButton(onClick = onClearKey) { Text("Remove") }
             }
-            ModelDropdown(model, onModel)
+        } else {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it.trim() },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Anthropic API key") },
+                placeholder = { Text("sk-ant-…") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                supportingText = { Text("From console.anthropic.com. Stays on this phone; never in backups.") },
+            )
+            Button(onClick = { onSaveKey(draft); draft = "" }, enabled = draft.isNotBlank()) { Text("Save key") }
         }
+        ModelDropdown(model, onModel)
     }
 }
 
@@ -444,26 +443,24 @@ private fun ExactAlarmCard() {
         onPauseOrDispose { }
     }
     if (!canExact) {
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Exact timing is off",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
+        JournalCard(color = MaterialTheme.colorScheme.errorContainer, border = null, spacing = 8.dp) {
+            Text(
+                "Exact timing is off",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                "Prompts will still arrive, but with up to ±10 min of drift. " +
+                    "Allow exact alarms for precise random timing.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            TextButton(onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
-                Text(
-                    "Prompts will still arrive, but with up to ±10 min of drift. " +
-                        "Allow exact alarms for precise random timing.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                TextButton(onClick = {
-                    context.startActivity(
-                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }) { Text("Allow exact alarms") }
-            }
+            }) { Text("Allow exact alarms") }
         }
     }
 }
@@ -483,60 +480,56 @@ private fun CategoryEditorCard(
     var adding by rememberSaveable { mutableStateOf(false) }
     var showArchived by rememberSaveable { mutableStateOf(false) }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { adding = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add $title")
+    JournalCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = { adding = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Add $title")
+            }
+        }
+        // Activities are shown under their group headers; other types as one flat row.
+        val sections: List<Pair<String?, List<CategoryEntity>>> = remember(group.active, grouped) {
+            if (grouped) group.active.byActivityGroup().map { (g, items) -> g.label to items }
+            else listOf(null to group.active)
+        }
+        sections.forEach { (header, items) ->
+            if (header != null) GroupHeader(header)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items.forEach { category ->
+                    ActionChip(onClick = { editingId = category.id }, label = { Text(category.label) })
                 }
             }
-            // Activities are shown under their group headers; other types as one flat row.
-            val sections: List<Pair<String?, List<CategoryEntity>>> = remember(group.active, grouped) {
-                if (grouped) group.active.byActivityGroup().map { (g, items) -> g.label to items }
-                else listOf(null to group.active)
+        }
+        Text(
+            "Tap a chip to rename, ${if (grouped) "regroup, " else ""}reorder or archive it. " +
+                "Archived items keep their history.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val unusedCount = (group.active + group.archived).count { (usage[it.id] ?: 0) == 0 }
+        if (group.archived.isNotEmpty() || unusedCount > 0) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                if (group.archived.isNotEmpty()) {
+                    TextButton(onClick = { showArchived = !showArchived }) {
+                        Text(if (showArchived) "Hide archived (${group.archived.size})" else "Archived (${group.archived.size})")
+                    }
+                }
+                if (unusedCount > 0) {
+                    TextButton(onClick = { viewModel.askClearUnused(type, title) }) {
+                        Text("Clear unused ($unusedCount)…")
+                    }
+                }
             }
-            sections.forEach { (header, items) ->
-                if (header != null) GroupHeader(header)
+        }
+        if (group.archived.isNotEmpty()) {
+            if (showArchived) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items.forEach { category ->
-                        AssistChip(onClick = { editingId = category.id }, label = { Text(category.label) })
-                    }
-                }
-            }
-            Text(
-                "Tap a chip to rename, ${if (grouped) "regroup, " else ""}reorder or archive it. " +
-                    "Archived items keep their history.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            val unusedCount = (group.active + group.archived).count { (usage[it.id] ?: 0) == 0 }
-            if (group.archived.isNotEmpty() || unusedCount > 0) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    if (group.archived.isNotEmpty()) {
-                        TextButton(onClick = { showArchived = !showArchived }) {
-                            Text(if (showArchived) "Hide archived (${group.archived.size})" else "Archived (${group.archived.size})")
-                        }
-                    }
-                    if (unusedCount > 0) {
-                        TextButton(onClick = { viewModel.askClearUnused(type, title) }) {
-                            Text("Clear unused ($unusedCount)…")
-                        }
-                    }
-                }
-            }
-            if (group.archived.isNotEmpty()) {
-                if (showArchived) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        group.archived.forEach { category ->
-                            AssistChip(
-                                onClick = { editingId = category.id },
-                                label = { Text(category.label) },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                ),
-                            )
-                        }
+                    group.archived.forEach { category ->
+                        ActionChip(
+                            onClick = { editingId = category.id },
+                            label = { Text(category.label) },
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
