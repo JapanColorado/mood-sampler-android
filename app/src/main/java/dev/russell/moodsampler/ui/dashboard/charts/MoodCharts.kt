@@ -57,6 +57,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.common.component.TextComponent
+import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.shape.CorneredShape
 import com.patrykandpatrick.vico.core.common.shape.Shape
 import dev.russell.moodsampler.R
@@ -130,9 +131,19 @@ private val MOOD_MAX = MoodScale.MAX.toDouble()
 
 private val dateFmt = DateTimeFormatter.ofPattern("MMM d")
 
-@Composable
-private fun dateFormatter(dates: List<LocalDate>) = remember(dates) {
-    CartesianValueFormatter { _, value, _ -> dates.getOrNull(value.toInt())?.format(dateFmt) ?: "" }
+/**
+ * The dates behind a time-series model's x indices. They ride in the model's extra
+ * store so the axis always labels the model it is drawing: the model updates
+ * asynchronously, so a formatter keyed on the composition's dates would briefly label
+ * an older, longer model and return "" for its extra points, which Vico rejects with a
+ * crash (seen when flipping the range quickly).
+ */
+private val DatesKey = ExtraStore.Key<List<LocalDate>>()
+
+private val dateFormatter = CartesianValueFormatter { context, value, _ ->
+    // Never "": Vico throws on an empty label. The fallback can't trigger while the dates travel with the model.
+    context.model.extraStore.getOrNull(DatesKey)?.getOrNull(value.toInt())?.format(dateFmt)
+        ?: value.toInt().toString()
 }
 
 @Composable
@@ -217,11 +228,11 @@ fun MoodTimeSeriesChart(days: List<DayMood>, modifier: Modifier = Modifier) {
                 series(x = days.indices.toList(), y = days.map { it.valence })
                 series(x = days.indices.toList(), y = days.map { it.arousal })
             }
+            extras { it[DatesKey] = days.map { day -> day.date } }
         }
     }
     val valenceColor = MoodChartColors.valence()
     val arousalColor = MoodChartColors.arousal()
-    val bottomFormatter = dateFormatter(days.map { it.date })
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FittedChart(
             chart = rememberCartesianChart(
@@ -230,7 +241,7 @@ fun MoodTimeSeriesChart(days: List<DayMood>, modifier: Modifier = Modifier) {
                     rangeProvider = remember { CartesianLayerRangeProvider.fixed(minY = MOOD_MIN, maxY = MOOD_MAX) },
                 ),
                 startAxis = valueAxis(),
-                bottomAxis = labelAxis(bottomFormatter, dateLabelSpacing(days.size)),
+                bottomAxis = labelAxis(dateFormatter, dateLabelSpacing(days.size)),
             ),
             modelProducer = modelProducer,
             height = 220.dp,
@@ -249,10 +260,10 @@ fun PainTimeSeriesChart(days: List<DayPain>, modifier: Modifier = Modifier) {
     LaunchedEffect(days) {
         modelProducer.runTransaction {
             lineSeries { series(x = days.indices.toList(), y = days.map { it.pain }) }
+            extras { it[DatesKey] = days.map { day -> day.date } }
         }
     }
     val painColor = MoodChartColors.pain()
-    val bottomFormatter = dateFormatter(days.map { it.date })
     FittedChart(
         chart = rememberCartesianChart(
             rememberLineCartesianLayer(
@@ -260,7 +271,7 @@ fun PainTimeSeriesChart(days: List<DayPain>, modifier: Modifier = Modifier) {
                 rangeProvider = remember { CartesianLayerRangeProvider.fixed(minY = 0.0, maxY = 10.0) },
             ),
             startAxis = valueAxis(),
-            bottomAxis = labelAxis(bottomFormatter, dateLabelSpacing(days.size)),
+            bottomAxis = labelAxis(dateFormatter, dateLabelSpacing(days.size)),
         ),
         modelProducer = modelProducer,
         height = 200.dp,
