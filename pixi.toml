@@ -30,6 +30,7 @@ clean = { cmd = "./gradlew clean", description = "Delete all Gradle build output
 test = { cmd = "./gradlew testDebugUnitTest", description = "Run JVM unit tests" }
 connected-test = { cmd = "./gradlew connectedDebugAndroidTest", description = "Run instrumented tests on the connected device" }
 lint = { cmd = "./gradlew lintDebug", description = "Run Android lint on the debug variant" }
+check = { cmd = "./gradlew lintDebug testDebugUnitTest --continue", description = "Everything CI checks before a release (lint + unit tests)" }
 
 # Device inspection
 logs = { cmd = "adb logcat -s MoodSampler:*", description = "Filtered logcat" }

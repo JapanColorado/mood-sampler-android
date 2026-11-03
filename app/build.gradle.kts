@@ -8,6 +8,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Commit count of HEAD (CI checks out full history, so local and CI builds agree); 1 outside git.
+val gitCommitCount: Int = runCatching {
+    providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
+        .standardOutput.asText.get().trim().toInt()
+}.getOrDefault(1)
+
 android {
     namespace = "dev.russell.moodsampler"
     compileSdk = 35
@@ -16,8 +22,10 @@ android {
         applicationId = "dev.russell.moodsampler"
         minSdk = 31
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3.1"
+        // Every push to main publishes a release (.github/workflows), so the version tracks the
+        // commit count. Bump the base versionName by hand for notable changes.
+        versionCode = gitCommitCount
+        versionName = "1.3.1.$gitCommitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

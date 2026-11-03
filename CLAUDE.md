@@ -22,6 +22,10 @@ Single test: `./gradlew testDebugUnitTest --tests 'dev.russell.moodsampler.sched
 
 The debug build uses the appId `dev.russell.moodsampler.debug`, so it installs alongside the release build. The debug build also puts "fire test prompt in 10 s" and "seed 30 days of fake data" buttons on Home (`BuildConfig.DEBUG`).
 
+## Releases
+
+Every push to `main` that passes `.github/workflows/ci.yml` (the same checks as `pixi run check`) publishes a signed APK as a GitHub release tagged `v<versionName>`. Obtainium on the phone installs it. Pushes that touch only docs don't release. `versionCode` is the commit count and `versionName` is `<base>.<count>`: bump the base in `app/build.gradle.kts` by hand, never hard-code `versionCode`, and never rewrite `main`'s history. CI signs with the keystore in the repo secrets, which must stay the key the installed app was signed with (the workflow's `EXPECTED_CERT_SHA256` enforces this). The shared change → emulator → push loop is in `~/Projects/Android-Apps/CLAUDE.md`.
+
 ## Architecture
 
 - **Manual DI**: `AppGraph` builds every repository and service once, in `MoodSamplerApp`. Code reaches it through `context.appGraph`. There is no Hilt or Koin; to add a service, wire it in `AppGraph`.

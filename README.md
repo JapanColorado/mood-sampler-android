@@ -94,6 +94,8 @@ mood and time use — unlike diaries, which oversample memorable moments.
 
 ## Building
 
+Every push to `main` that passes CI publishes a signed APK on the [Releases page](https://github.com/JapanColorado/mood-sampler-android/releases). To install it and get updates automatically, add `https://github.com/JapanColorado/mood-sampler-android` as a GitHub source in [Obtainium](https://github.com/ImranR98/Obtainium).
+
 Requires [pixi](https://pixi.sh) (it supplies JDK 21) and an Android SDK at
 `~/Android/Sdk` (exported as `ANDROID_HOME` on pixi activation). Never run
 `./gradlew` outside pixi. First-time setup on a fresh machine:
