@@ -29,7 +29,7 @@ class ClaudeRequestTest {
         val schema = format["schema"]!!.jsonObject
         assertThat(schema["type"]!!.jsonPrimitive.content).isEqualTo("object")
         assertThat(schema["required"]!!.jsonArray.map { it.jsonPrimitive.content })
-            .containsExactly("summary", "place", "activities", "company", "pain_types", "tags")
+            .containsExactly("summary", "place", "activities", "company", "pain_types", "emotions", "tags")
         assertThat(schema["properties"]!!.jsonObject["place"]!!.jsonObject["anyOf"]!!.jsonArray).hasSize(2)
         assertThat(json).doesNotContainKey("thinking")
     }

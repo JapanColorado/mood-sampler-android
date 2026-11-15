@@ -36,12 +36,12 @@ class CsvExporter(
         private val ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
         /**
-         * Column order of the export; `activities`, `pain_types` and `tags` join several values
+         * Column order of the export; `activities`, `pain_types`, `tags` and `emotions` join several values
          * with "; ". Columns added in later versions go at the end so existing scripts keep working.
          */
         const val HEADER =
             "scheduled_at_iso,answered_at_iso,status,skip_reason,latency_s,valence,arousal,pain,activities,location,social,note," +
-                "latitude,longitude,accuracy_m,photo,pain_types,summary,tags"
+                "latitude,longitude,accuracy_m,photo,pain_types,summary,tags,emotions"
 
         /**
          * Pure CSV formatting (unit-tested). Missed prompts are included with
@@ -77,6 +77,7 @@ class CsvExporter(
                         painTypeIds.mapNotNull { labels[it] }.joinToString("; "),
                         s?.summary ?: "",
                         row.sample?.tags.orEmpty().joinToString("; "),
+                        row.sample?.emotionIds.orEmpty().mapNotNull { labels[it] }.joinToString("; "),
                     ).joinToString(",") { quote(it) }
                 )
                 sb.append("\r\n")

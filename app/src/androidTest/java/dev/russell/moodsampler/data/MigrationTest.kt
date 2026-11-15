@@ -15,6 +15,7 @@ import dev.russell.moodsampler.data.db.MIGRATION_5_6
 import dev.russell.moodsampler.data.db.MIGRATION_6_7
 import dev.russell.moodsampler.data.db.MIGRATION_7_8
 import dev.russell.moodsampler.data.db.MIGRATION_8_9
+import dev.russell.moodsampler.data.db.MIGRATION_9_10
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -299,6 +300,44 @@ class MigrationTest {
         db.execSQL("INSERT INTO sample_tag (sampleId, tag) VALUES (1, 'deadline')")
         db.execSQL("DELETE FROM sample WHERE id = 1")
         db.query("SELECT (SELECT COUNT(*) FROM sample_pain) + (SELECT COUNT(*) FROM sample_tag)").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun migrate9To10_addsEmotionTableAndDefaultEmotions() {
+        helper.createDatabase(DB, 9).apply {
+            // Same label as a new default, but a pain type: must not block the emotion.
+            insertCategory("PAIN", "Tired", 1)
+            // An emotion-type row can't exist before v10, but the insert must still skip duplicates.
+            insertCategory("EMOTION", "calm", 7)
+            execSQL(
+                """INSERT INTO scheduled_prompt (id, scheduledAtEpochMs, localDate, windowIndex, status)
+                   VALUES (1, 1, '2026-11-14', 0, 'ANSWERED')"""
+            )
+            execSQL("INSERT INTO sample (id, promptId, valence, arousal, pain, note, createdAtEpochMs) VALUES (1, 1, 6, 4, 0, 'hi', 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB, 10, true, MIGRATION_9_10)
+
+        db.query("SELECT label FROM category WHERE type = 'EMOTION' ORDER BY sortOrder").use { c ->
+            val labels = buildList { while (c.moveToNext()) add(c.getString(0)) }
+            assertThat(labels).containsExactlyElementsIn(listOf("calm") + DefaultCategories.EMOTIONS.minus("Calm")).inOrder()
+        }
+        db.query("SELECT COUNT(*) FROM category WHERE type = 'PAIN' AND label = 'Tired'").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(1)
+        }
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL("INSERT INTO sample_emotion (sampleId, categoryId) SELECT 1, id FROM category WHERE type = 'EMOTION' AND label = 'Happy'")
+        db.query("SELECT COUNT(*) FROM sample_emotion").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(1)
+        }
+        db.execSQL("DELETE FROM sample WHERE id = 1")
+        db.query("SELECT COUNT(*) FROM sample_emotion").use { c ->
             c.moveToFirst()
             assertThat(c.getInt(0)).isEqualTo(0)
         }

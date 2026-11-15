@@ -25,7 +25,7 @@ android {
         // Every push to main publishes a release (.github/workflows), so the version tracks the
         // commit count. Bump the base versionName by hand for notable changes.
         versionCode = gitCommitCount
-        versionName = "1.3.1.$gitCommitCount"
+        versionName = "1.4.0.$gitCommitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

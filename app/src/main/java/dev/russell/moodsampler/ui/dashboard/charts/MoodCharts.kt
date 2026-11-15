@@ -65,12 +65,14 @@ import dev.russell.moodsampler.data.MoodScale
 import dev.russell.moodsampler.ui.dashboard.CategoryMood
 import dev.russell.moodsampler.ui.dashboard.DayMood
 import dev.russell.moodsampler.ui.dashboard.DayPain
+import dev.russell.moodsampler.ui.dashboard.EmotionShare
 import dev.russell.moodsampler.ui.dashboard.HourMood
 import dev.russell.moodsampler.ui.dashboard.Measure
 import dev.russell.moodsampler.ui.dashboard.PainLevelMood
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Measure colors — a CVD-validated teal/amber pair (dataviz-checked against the
@@ -397,6 +399,44 @@ fun CategoryBars(rows: List<CategoryMood>, measure: Measure, modifier: Modifier 
                         val extent = ((value - measure.min.toFloat()) / span) * size.width
                         drawRoundRect(color = barColor, size = Size(extent, size.height), cornerRadius = radius)
                     }
+                }
+            }
+        }
+    }
+}
+
+/** How often each emotion was named: a 0–100 % bar per emotion, in the ink color (not a measure hue). */
+@Composable
+fun EmotionShareBars(rows: List<EmotionShare>, modifier: Modifier = Modifier) {
+    val barColor = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.surfaceContainerHigh
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        rows.forEach { row ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        row.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text("${(row.share * 100).roundToInt()}%", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "  n=${row.n}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Canvas(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                ) {
+                    val radius = CornerRadius(size.height / 2f)
+                    drawRoundRect(color = track, cornerRadius = radius)
+                    val extent = row.share.toFloat().coerceIn(0f, 1f) * size.width
+                    drawRoundRect(color = barColor, size = Size(extent, size.height), cornerRadius = radius)
                 }
             }
         }

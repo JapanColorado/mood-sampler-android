@@ -44,6 +44,7 @@ class BackupManager(
         sampleDevices = db.sampleDao().getAllDevices().map { it.toDto() },
         samplePainTypes = db.sampleDao().getAllPainTypes().map { it.toDto() },
         sampleTags = db.sampleDao().getAllTags().map { it.toDto() },
+        sampleEmotions = db.sampleDao().getAllEmotions().map { it.toDto() },
     )
 
     /** Parse and validate without touching the database. */
@@ -62,6 +63,7 @@ class BackupManager(
         db.withTransaction {
             db.sampleDao().deleteAllActivities()
             db.sampleDao().deleteAllPainTypes()
+            db.sampleDao().deleteAllEmotions()
             db.sampleDao().deleteAllTags()
             db.sampleDao().deleteAllDevices()
             db.sampleDao().deleteAll()
@@ -98,6 +100,7 @@ class BackupManager(
 internal suspend fun AppDatabase.replaceTables(backup: Backup) = withTransaction {
     sampleDao().deleteAllActivities()
     sampleDao().deleteAllPainTypes()
+    sampleDao().deleteAllEmotions()
     sampleDao().deleteAllTags()
     sampleDao().deleteAllDevices()
     sampleDao().deleteAll()
@@ -109,6 +112,7 @@ internal suspend fun AppDatabase.replaceTables(backup: Backup) = withTransaction
     sampleDao().insertAll(backup.samples.map { it.toEntity(backup.schemaVersion) })
     sampleDao().insertActivities(backup.sampleActivities.map { it.toEntity() })
     sampleDao().insertPainTypes(backup.samplePainTypes.map { it.toEntity() })
+    sampleDao().insertEmotions(backup.sampleEmotions.map { it.toEntity() })
     sampleDao().insertTags(backup.sampleTags.map { it.toEntity() })
     sampleDao().insertDevices(backup.sampleDevices.map { it.toEntity() })
 }

@@ -27,6 +27,7 @@ class CsvFormatTest {
         painTypeIds: List<Long> = emptyList(),
         summary: String? = null,
         tags: List<String> = emptyList(),
+        emotionIds: List<Long> = emptyList(),
     ) = PromptWithSample(
         prompt = ScheduledPromptEntity(
             id = 1, scheduledAtEpochMs = 1_700_000_000_000, localDate = "2023-11-14",
@@ -46,6 +47,7 @@ class CsvFormatTest {
             activityIds = activityIds,
             painTypeIds = painTypeIds,
             tags = tags,
+            emotionIds = emotionIds,
         ) else null,
     )
 
@@ -56,10 +58,10 @@ class CsvFormatTest {
         val csv = CsvExporter.toCsv(listOf(row(note = null)), mapOf(10L to "Work"), zone)
         val lines = csv.trim().split("\r\n")
         assertThat(lines).hasSize(2)
-        assertThat(lines[0].split(",")).hasSize(19)
+        assertThat(lines[0].split(",")).hasSize(20)
         assertThat(lines[0]).isEqualTo(CsvExporter.HEADER)
         val cols = columns(csv)
-        assertThat(cols).hasSize(19)
+        assertThat(cols).hasSize(20)
         assertThat(cols[2]).isEqualTo("ANSWERED")
         assertThat(cols[3]).isEmpty()          // skip_reason
         assertThat(cols[4]).isEqualTo("120")   // latency seconds
@@ -67,7 +69,7 @@ class CsvFormatTest {
         assertThat(cols[6]).isEqualTo("4")     // arousal
         assertThat(cols[7]).isEqualTo("4")     // pain
         assertThat(cols[8]).isEqualTo("Work")
-        assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix, photo, pain types, summary or tags
+        assertThat(cols.drop(12).all { it.isEmpty() }).isTrue()  // no fix, photo, pain types, summary, tags or emotions
     }
 
     @Test
@@ -80,6 +82,15 @@ class CsvFormatTest {
         assertThat(cols[16]).isEqualTo("Headache; Back")
         assertThat(cols[17]).isEqualTo("Tired after the run.")
         assertThat(cols[18]).isEqualTo("rain; coffee")
+    }
+
+    @Test
+    fun emotionsAreExportedInTheLastColumn() {
+        val csv = CsvExporter.toCsv(
+            listOf(row(note = null, emotionIds = listOf(30L, 31L))),
+            mapOf(30L to "Calm", 31L to "Tired"), zone,
+        )
+        assertThat(columns(csv)[19]).isEqualTo("Calm; Tired")
     }
 
     @Test

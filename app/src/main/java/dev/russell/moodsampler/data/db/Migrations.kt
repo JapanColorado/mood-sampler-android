@@ -248,6 +248,27 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/**
+ * v9 → v10, for emotions: a new `sample_emotion` join table (sample ↔ EMOTION
+ * category), which existing samples leave empty, and the default emotions added as
+ * EMOTION categories, skipping any label the user somehow already has.
+ * The CREATE statements mirror 10.json.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sample_emotion` (
+               `sampleId` INTEGER NOT NULL,
+               `categoryId` INTEGER NOT NULL,
+               PRIMARY KEY(`sampleId`, `categoryId`),
+               FOREIGN KEY(`sampleId`) REFERENCES `sample`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE ,
+               FOREIGN KEY(`categoryId`) REFERENCES `category`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_sample_emotion_categoryId` ON `sample_emotion` (`categoryId`)")
+        DefaultCategories.EMOTIONS.forEach { insertCategoryIfMissing(db, CategoryType.EMOTION, it) }
+    }
+}
+
 private fun insertCategoryIfMissing(db: SupportSQLiteDatabase, type: CategoryType, label: String) {
     db.execSQL(
         """INSERT INTO `category` (`type`, `label`, `sortOrder`, `isArchived`)

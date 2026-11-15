@@ -78,6 +78,7 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                 val locations by viewModel.locations.collectAsState()
                 val socials by viewModel.socials.collectAsState()
                 val painTypes by viewModel.painTypes.collectAsState()
+                val emotions by viewModel.emotions.collectAsState()
                 val usage by viewModel.usage.collectAsState()
                 CaptureForm(
                     initial = s.initial,
@@ -85,6 +86,7 @@ fun EditSampleScreen(promptId: Long, onDone: () -> Unit) {
                     locations = locations,
                     socials = socials,
                     painTypes = painTypes,
+                    emotions = emotions,
                     usage = usage,
                     locationStatus = LocationStatus.Off,
                     suggestedLocationId = null,

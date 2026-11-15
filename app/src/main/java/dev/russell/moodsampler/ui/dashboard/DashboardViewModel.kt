@@ -53,6 +53,8 @@ data class DayMood(val date: LocalDate, val valence: Double, val arousal: Double
 data class DayPain(val date: LocalDate, val pain: Double, val n: Int)
 data class HourMood(val hour: Int, val value: Double, val n: Int)
 data class CategoryMood(val label: String, val value: Double, val n: Int)
+/** How many answers named an emotion, and what fraction of all answers that is. */
+data class EmotionShare(val label: String, val n: Int, val share: Double)
 /** Mean valence of the samples rated at one pain level. */
 data class PainLevelMood(val level: Int, val valence: Double, val n: Int)
 
@@ -61,11 +63,14 @@ data class DashboardData(
     val days: List<DayMood> = emptyList(),
     val painDays: List<DayPain> = emptyList(),
     val painByLevel: List<PainLevelMood> = emptyList(),
+    /** Emotions by how often they were named, most frequent first. */
+    val emotionShares: List<EmotionShare> = emptyList(),
     /** Per-hour / per-category means of [measure]. */
     val hours: List<HourMood> = emptyList(),
     val byActivity: List<CategoryMood> = emptyList(),
     val byLocation: List<CategoryMood> = emptyList(),
     val bySocial: List<CategoryMood> = emptyList(),
+    val byEmotion: List<CategoryMood> = emptyList(),
     val answered: Int = 0,
     val missed: Int = 0,
 ) {
@@ -146,15 +151,27 @@ class DashboardViewModel(
             row.sample.activityIds.map { it to value }
         }
 
+        val emotionPairs = answered.flatMap { row ->
+            val value = measure.of(row.sample!!.sample) ?: return@flatMap emptyList()
+            row.sample.emotionIds.map { it to value }
+        }
+        val emotionShares = answered
+            .flatMap { it.sample!!.emotionIds.distinct() }
+            .groupingBy { it }.eachCount()
+            .mapNotNull { (id, n) -> labels[id]?.let { EmotionShare(it, n, n.toDouble() / answered.size) } }
+            .sortedWith(compareByDescending<EmotionShare> { it.n }.thenBy { it.label })
+
         return DashboardData(
             measure = measure,
             days = days,
             painDays = painDays,
             painByLevel = painByLevel,
+            emotionShares = emotionShares,
             hours = hours,
             byActivity = byCategory(activityPairs),
             byLocation = byCategory(measured.mapNotNull { (_, s, v) -> s.locationId?.let { it to v } }),
             bySocial = byCategory(measured.mapNotNull { (_, s, v) -> s.socialId?.let { it to v } }),
+            byEmotion = byCategory(emotionPairs),
             answered = answered.size,
             missed = prompts.count { it.prompt.status == PromptStatus.MISSED },
         )

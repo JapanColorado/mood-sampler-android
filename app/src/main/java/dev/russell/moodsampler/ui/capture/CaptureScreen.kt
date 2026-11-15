@@ -48,6 +48,7 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
             val locations by viewModel.locations.collectAsState()
             val socials by viewModel.socials.collectAsState()
             val painTypes by viewModel.painTypes.collectAsState()
+            val emotions by viewModel.emotions.collectAsState()
             val usage by viewModel.usage.collectAsState()
             val locationStatus by viewModel.locationStatus.collectAsState()
             val suggested by viewModel.suggestedLocationId.collectAsState()
@@ -59,6 +60,7 @@ fun CaptureScreen(promptId: Long, onDone: () -> Unit) {
                 locations = locations,
                 socials = socials,
                 painTypes = painTypes,
+                emotions = emotions,
                 usage = usage,
                 locationStatus = locationStatus,
                 suggestedLocationId = suggested,

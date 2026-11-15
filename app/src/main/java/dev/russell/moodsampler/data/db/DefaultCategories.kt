@@ -71,12 +71,21 @@ object DefaultCategories {
         "Stomach / gut", "Menstrual cramps", "Tooth / jaw", "Eye strain", "Nerve pain", "Injury",
     )
 
+    /** Emotions (schema v10), roughly pleasant then unpleasant; the 9→10 migration adds them for existing installs. */
+    val EMOTIONS = listOf(
+        "Happy", "Excited", "Proud", "Grateful", "Amused", "Loving", "Inspired",
+        "Calm", "Content", "Relaxed", "Hopeful", "Focused",
+        "Anxious", "Stressed", "Frustrated", "Angry", "Overwhelmed", "Embarrassed", "Guilty",
+        "Sad", "Lonely", "Bored", "Tired", "Numb",
+    )
+
     /** Full seed for a fresh install, in display order. */
     val DEFAULT_CATEGORIES: Map<CategoryType, List<String>> = mapOf(
         CategoryType.ACTIVITY to V1_ACTIVITIES + V2_ADDED_ACTIVITIES,
         CategoryType.LOCATION to V1_LOCATIONS + V2_ADDED_LOCATIONS,
         CategoryType.SOCIAL to SOCIAL,
         CategoryType.PAIN to PAIN_TYPES,
+        CategoryType.EMOTION to EMOTIONS,
     )
 
     /**

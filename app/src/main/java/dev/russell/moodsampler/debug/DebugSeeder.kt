@@ -4,10 +4,12 @@ import dev.russell.moodsampler.AppGraph
 import dev.russell.moodsampler.data.MoodScale
 import dev.russell.moodsampler.data.SkipReason
 import dev.russell.moodsampler.data.db.CategoryType
+import dev.russell.moodsampler.data.db.DefaultCategories
 import dev.russell.moodsampler.data.db.PromptStatus
 import dev.russell.moodsampler.data.db.SampleActivityCrossRef
 import dev.russell.moodsampler.data.db.SampleDeviceEntity
 import dev.russell.moodsampler.data.db.SampleEntity
+import dev.russell.moodsampler.data.db.SampleEmotionCrossRef
 import dev.russell.moodsampler.data.db.SamplePainCrossRef
 import dev.russell.moodsampler.data.db.SampleTagEntity
 import dev.russell.moodsampler.data.db.ScheduledPromptEntity
@@ -33,6 +35,10 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
     val locations = categories.filter { it.type == CategoryType.LOCATION }
     val socials = categories.filter { it.type == CategoryType.SOCIAL }
     val painTypes = categories.filter { it.type == CategoryType.PAIN }
+    // Emotions follow valence: the defaults list the pleasant ones first.
+    val pleasantLabels = DefaultCategories.EMOTIONS.take(PLEASANT_DEFAULT_EMOTIONS).map { it.lowercase() }.toSet()
+    val (pleasantEmotions, unpleasantEmotions) = categories.filter { it.type == CategoryType.EMOTION }
+        .partition { it.label.lowercase() in pleasantLabels }
     // Stand-ins for Claude's free-form tags on about a third of the answers.
     val tagPool = listOf("coffee", "deadline", "rain", "music", "tired", "outdoors", "screen time")
 
@@ -99,6 +105,14 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
                     val kinds = painTypes.shuffled(random).take(random.nextInt(1, 3))
                     sampleDao.insertPainTypes(kinds.map { SamplePainCrossRef(sampleId, it.id) })
                 }
+                // Most answers name one or two emotions, mostly matching the valence.
+                if (random.nextFloat() < 0.8f) {
+                    val matching = if (valence >= 0) pleasantEmotions else unpleasantEmotions
+                    val other = if (valence >= 0) unpleasantEmotions else pleasantEmotions
+                    val felt = (matching.shuffled(random).take(random.nextInt(1, 3)) +
+                        if (random.nextFloat() < 0.15f) listOfNotNull(other.randomOrNull(random)) else emptyList())
+                    if (felt.isNotEmpty()) sampleDao.insertEmotions(felt.map { SampleEmotionCrossRef(sampleId, it.id) })
+                }
                 if (random.nextFloat() < 0.33f) {
                     val tags = tagPool.shuffled(random).take(random.nextInt(1, 3))
                     sampleDao.insertTags(tags.map { SampleTagEntity(sampleId, it) })
@@ -107,6 +121,9 @@ suspend fun seedFakeHistory(graph: AppGraph, days: Int = 30, seed: Long = 7) {
         }
     }
 }
+
+/** How many of [DefaultCategories.EMOTIONS], from the start, are pleasant. */
+private const val PLEASANT_DEFAULT_EMOTIONS = 12
 
 private fun <T> List<T>.randomOrNull(random: Random): T? =
     if (isEmpty()) null else this[random.nextInt(size)]

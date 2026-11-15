@@ -9,6 +9,7 @@ import dev.russell.moodsampler.data.backup.PromptDto
 import dev.russell.moodsampler.data.backup.SampleActivityDto
 import dev.russell.moodsampler.data.backup.SampleDeviceDto
 import dev.russell.moodsampler.data.backup.SampleDto
+import dev.russell.moodsampler.data.backup.SampleEmotionDto
 import dev.russell.moodsampler.data.backup.SamplePainDto
 import dev.russell.moodsampler.data.backup.SampleTagDto
 import dev.russell.moodsampler.data.backup.SettingsDto
@@ -31,6 +32,7 @@ class BackupCodecTest {
             CategoryDto(1, "ACTIVITY", "Work", 1, false, "WORK"),
             CategoryDto(2, "LOCATION", "Home", 1, true),
             CategoryDto(5, "PAIN", "Headache", 1, false),
+            CategoryDto(6, "EMOTION", "Calm", 1, false),
         ),
         prompts = listOf(PromptDto(7, 1_700_000_000_000, "2023-11-14", 0, "ANSWERED", 1_700_000_000_000, 1_700_000_120_000)),
         samples = listOf(
@@ -43,6 +45,7 @@ class BackupCodecTest {
         sampleDevices = listOf(SampleDeviceDto(3, "0123456789abcdef")),
         samplePainTypes = listOf(SamplePainDto(3, 5)),
         sampleTags = listOf(SampleTagDto(3, "deadline")),
+        sampleEmotions = listOf(SampleEmotionDto(3, 6)),
     )
 
     @Test
@@ -73,6 +76,7 @@ class BackupCodecTest {
         assertThat(decoded.sampleDevices).isEmpty()
         assertThat(decoded.samplePainTypes).isEmpty()
         assertThat(decoded.sampleTags).isEmpty()
+        assertThat(decoded.sampleEmotions).isEmpty()
         assertThat(decoded.settings.claudeModel).isNull()
         assertThat(decoded.samples.single().summary).isNull()
         assertThat(decoded.categories.single().group).isNull()
@@ -95,12 +99,27 @@ class BackupCodecTest {
     @Test
     fun preV9BackupGetsTheDefaultPainTypes() {
         val old = sample.copy(schemaVersion = 8, categories = sample.categories.filter { it.type != "PAIN" })
-        val added = old.missingDefaultCategories()
+        val added = old.missingDefaultCategories().filter { it.type == CategoryType.PAIN }
         assertThat(added.map { it.label }).containsExactlyElementsIn(DefaultCategories.PAIN_TYPES).inOrder()
         assertThat(added.all { it.type == CategoryType.PAIN && it.id == 0L }).isTrue()
         assertThat(added.map { it.sortOrder }).isEqualTo((1..DefaultCategories.PAIN_TYPES.size).toList())
         // Current backups already carry their own pain types.
         assertThat(sample.missingDefaultCategories()).isEmpty()
+    }
+
+    @Test
+    fun preV10BackupGetsTheDefaultEmotionsButKeepsItsOwnSpelling() {
+        // A v9 user had no emotion list; one defaulted label already exists as another type.
+        val old = sample.copy(schemaVersion = 9, categories = sample.categories.filter { it.type != "EMOTION" })
+        val added = old.missingDefaultCategories()
+        assertThat(added.map { it.label }).containsExactlyElementsIn(DefaultCategories.EMOTIONS).inOrder()
+        assertThat(added.all { it.type == CategoryType.EMOTION && it.id == 0L }).isTrue()
+        assertThat(added.map { it.sortOrder }).isEqualTo((1..DefaultCategories.EMOTIONS.size).toList())
+        // An EMOTION row a v9 file somehow carries is not duplicated (case-insensitive).
+        val withCalm = old.copy(categories = old.categories + CategoryDto(8, "EMOTION", "calm", 4, false))
+        val topUp = withCalm.missingDefaultCategories()
+        assertThat(topUp.map { it.label }).doesNotContain("Calm")
+        assertThat(topUp.first().sortOrder).isEqualTo(5)
     }
 
     @Test

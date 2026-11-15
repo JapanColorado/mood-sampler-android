@@ -50,6 +50,7 @@ class EditSampleViewModel(
     val locations = pickerOptions(CategoryType.LOCATION) { listOfNotNull(loaded?.sample?.locationId) }
     val socials = pickerOptions(CategoryType.SOCIAL) { listOfNotNull(loaded?.sample?.socialId) }
     val painTypes = pickerOptions(CategoryType.PAIN) { loaded?.painTypeIds.orEmpty() }
+    val emotions = pickerOptions(CategoryType.EMOTION) { loaded?.emotionIds.orEmpty() }
 
     /** Whether a Claude API key is set, so the form can offer to fill itself in; null until known. */
     val assistAvailable: StateFlow<Boolean?> = assistant.available
@@ -67,6 +68,7 @@ class EditSampleViewModel(
                     arousal = found.sample.arousal,
                     pain = found.sample.pain ?: 0,
                     painTypeIds = found.painTypeIds,
+                    emotionIds = found.emotionIds,
                     activityIds = found.activityIds,
                     locationId = found.sample.locationId,
                     socialId = found.sample.socialId,
@@ -98,6 +100,7 @@ class EditSampleViewModel(
                 ),
                 activityIds = values.activityIds,
                 painTypeIds = values.painTypeIds,
+                emotionIds = values.emotionIds,
                 tags = values.tags,
             )
             _state.value = EditUiState.Done

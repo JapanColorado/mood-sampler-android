@@ -121,6 +121,7 @@ data class CaptureFormValues(
     val arousal: Int? = null,
     val pain: Int = 0,
     val painTypeIds: List<Long> = emptyList(),
+    val emotionIds: List<Long> = emptyList(),
     val activityIds: List<Long> = emptyList(),
     val locationId: Long? = null,
     val socialId: Long? = null,
@@ -145,8 +146,9 @@ typealias AssistAction = suspend (narration: String, photo: Uri?, guessedPlaceId
  *
  * Built so a capture can be mostly talked through: the narration box (type or
  * dictate) and photo come first, and "Fill in with Claude" turns them into the place,
- * activities, company and pain types, plus a summary and tags. The three tap scales
- * stay the user's own. The context chips sit in a collapsible "Manual" section that
+ * activities, company, pain types and emotions, plus a summary and tags. The three tap
+ * scales stay the user's own; emotions come after them so naming a feeling can't anchor
+ * the valence. The context chips sit in a collapsible "Manual" section that
  * shows what's picked at a glance; each ends in an "Other…" chip that names a new
  * option, kept for future prompts. Save is pinned to the bottom.
  */
@@ -157,6 +159,7 @@ internal fun CaptureForm(
     locations: List<CategoryEntity>,
     socials: List<CategoryEntity>,
     painTypes: List<CategoryEntity>,
+    emotions: List<CategoryEntity>,
     /** Sample counts per category id; orders the short lists by "most used". */
     usage: Map<Long, Int>,
     locationStatus: LocationStatus,
@@ -184,6 +187,7 @@ internal fun CaptureForm(
     var arousal by rememberSaveable { mutableIntStateOf(initial.arousal ?: UNPICKED) }
     var pain by rememberSaveable { mutableIntStateOf(initial.pain) }
     val painTypeIds = rememberSaveable(saver = LongListSaver) { initial.painTypeIds.toMutableStateList() }
+    val emotionIds = rememberSaveable(saver = LongListSaver) { initial.emotionIds.toMutableStateList() }
     val activityIds = rememberSaveable(saver = LongListSaver) { initial.activityIds.toMutableStateList() }
     var locationId by rememberSaveable { mutableStateOf(initial.locationId) }
     var socialId by rememberSaveable { mutableStateOf(initial.socialId) }
@@ -198,6 +202,7 @@ internal fun CaptureForm(
     var companyTouched by rememberSaveable { mutableStateOf(false) }
     var activitiesTouched by rememberSaveable { mutableStateOf(false) }
     var painTypesTouched by rememberSaveable { mutableStateOf(false) }
+    var emotionsTouched by rememberSaveable { mutableStateOf(false) }
     // Without Claude the chips are the only way in, so start open.
     var manualOpen by rememberSaveable { mutableStateOf(onAssist == null) }
     var assisting by remember { mutableStateOf(false) }
@@ -235,6 +240,7 @@ internal fun CaptureForm(
         if (!companyTouched) fill.socialId?.let { socialId = it }
         mergeInto(activityIds, fill.activityIds, replace = !activitiesTouched)
         mergeInto(painTypeIds, fill.painTypeIds, replace = !painTypesTouched)
+        mergeInto(emotionIds, fill.emotionIds, replace = !emotionsTouched)
         manualOpen = true
     }
 
@@ -337,6 +343,11 @@ internal fun CaptureForm(
                         }
                     }
                 }
+                Rule()
+                EmotionSection(emotions, emotionIds, onOther = { addingType = CategoryType.EMOTION }) { id ->
+                    emotionsTouched = true
+                    if (!emotionIds.remove(id)) emotionIds.add(id)
+                }
             }
 
             ManualSection(
@@ -379,6 +390,7 @@ internal fun CaptureForm(
                         arousal = arousal,
                         pain = pain,
                         painTypeIds = painTypeIds.toList(),
+                        emotionIds = emotionIds.toList(),
                         activityIds = activityIds.toList(),
                         locationId = locationId,
                         socialId = pickedSocialId,
@@ -403,6 +415,7 @@ internal fun CaptureForm(
                     CategoryType.ACTIVITY -> { activitiesTouched = true; if (id !in activityIds) activityIds.add(id) }
                     CategoryType.SOCIAL -> { companyTouched = true; socialId = id }
                     CategoryType.PAIN -> { painTypesTouched = true; if (id !in painTypeIds) painTypeIds.add(id) }
+                    CategoryType.EMOTION -> { emotionsTouched = true; if (id !in emotionIds) emotionIds.add(id) }
                 }
             }
         }
@@ -839,6 +852,37 @@ private fun PainTypeSection(
     }
 }
 
+/** Emotions felt right now, multi-select, after the scales. Every option shows, in list order. */
+@Composable
+private fun EmotionSection(
+    options: List<CategoryEntity>,
+    selectedIds: List<Long>,
+    onOther: () -> Unit,
+    onToggle: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text("Feeling", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            Text(
+                "pick any",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        ChipFlow {
+            options.forEach { option ->
+                OptionChip(
+                    selected = option.id in selectedIds,
+                    onClick = { onToggle(option.id) },
+                    label = { Text(option.label) },
+                )
+            }
+            OtherChip(onOther)
+        }
+    }
+}
+
 /**
  * Place, activities and company by hand. Collapsed, it still shows what's picked —
  * from Claude, the location fix or the device scan — so a glance is enough to check.
@@ -945,6 +989,7 @@ private fun AddOptionDialog(type: CategoryType, onDismiss: () -> Unit, onConfirm
                     CategoryType.ACTIVITY -> "Doing something else?"
                     CategoryType.SOCIAL -> "With someone else?"
                     CategoryType.PAIN -> "Another kind of pain?"
+                    CategoryType.EMOTION -> "Feeling something else?"
                 }
             )
         },
@@ -961,6 +1006,7 @@ private fun AddOptionDialog(type: CategoryType, onDismiss: () -> Unit, onConfirm
                             CategoryType.ACTIVITY -> "e.g. Gardening"
                             CategoryType.SOCIAL -> "e.g. Roommates"
                             CategoryType.PAIN -> "e.g. Sciatica"
+                            CategoryType.EMOTION -> "e.g. Nostalgic"
                         }
                     )
                 },

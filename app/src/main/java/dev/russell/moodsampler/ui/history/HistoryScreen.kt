@@ -83,7 +83,7 @@ fun HistoryScreen(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                placeholder = { Text("Search notes and tags") },
+                placeholder = { Text("Search notes, feelings and tags") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -231,6 +231,15 @@ private fun AnsweredSummary(row: HistoryRow) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Reading("Energy", row.arousal?.toString() ?: "–")
         row.pain?.let { pain -> Reading("Pain", pain.toString(), alert = pain > 0) }
+    }
+    if (row.emotions.isNotEmpty()) {
+        Text(
+            row.emotions.joinToString(", "),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
     if (row.tags.isNotEmpty()) {
         Text(

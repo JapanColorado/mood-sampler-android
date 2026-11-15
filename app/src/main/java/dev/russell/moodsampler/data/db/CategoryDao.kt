@@ -39,6 +39,7 @@ interface CategoryDao {
         """SELECT * FROM category WHERE type = :type
            AND id NOT IN (SELECT categoryId FROM sample_activity)
            AND id NOT IN (SELECT categoryId FROM sample_pain)
+           AND id NOT IN (SELECT categoryId FROM sample_emotion)
            AND id NOT IN (SELECT locationId FROM sample WHERE locationId IS NOT NULL)
            AND id NOT IN (SELECT socialId FROM sample WHERE socialId IS NOT NULL)
            ORDER BY sortOrder, id"""
@@ -50,6 +51,7 @@ interface CategoryDao {
         """DELETE FROM category WHERE id IN (:ids)
            AND id NOT IN (SELECT categoryId FROM sample_activity)
            AND id NOT IN (SELECT categoryId FROM sample_pain)
+           AND id NOT IN (SELECT categoryId FROM sample_emotion)
            AND id NOT IN (SELECT locationId FROM sample WHERE locationId IS NOT NULL)
            AND id NOT IN (SELECT socialId FROM sample WHERE socialId IS NOT NULL)"""
     )

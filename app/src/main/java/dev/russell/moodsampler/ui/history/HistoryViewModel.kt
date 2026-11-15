@@ -28,6 +28,7 @@ data class HistoryRow(
     val arousal: Int?,
     val pain: Int?,
     val painTypes: List<String>,
+    val emotions: List<String>,
     val activities: List<String>,
     val location: String?,
     val social: String?,
@@ -38,6 +39,7 @@ data class HistoryRow(
     val freeTags: List<String>,
     val photoPath: String?,
 ) {
+    /** Context and Claude's tags; emotions show on a line of their own. */
     val tags: List<String> get() = activities + listOfNotNull(location, social) + painTypes + freeTags.map { "#$it" }
 }
 
@@ -72,6 +74,7 @@ class HistoryViewModel(
         return row.note?.lowercase()?.contains(needle) == true ||
             row.summary?.lowercase()?.contains(needle) == true ||
             row.tags.any { it.lowercase().contains(needle) } ||
+            row.emotions.any { it.lowercase().contains(needle) } ||
             (!row.answered && row.missedLabel.lowercase().contains(needle))
     }
 
@@ -90,6 +93,7 @@ class HistoryViewModel(
             arousal = s?.sample?.arousal,
             pain = s?.sample?.pain,
             painTypes = s?.painTypeIds?.mapNotNull { labels[it] }.orEmpty(),
+            emotions = s?.emotionIds?.mapNotNull { labels[it] }.orEmpty(),
             activities = s?.activityIds?.mapNotNull { labels[it] }.orEmpty(),
             location = s?.sample?.locationId?.let { labels[it] },
             social = s?.sample?.socialId?.let { labels[it] },

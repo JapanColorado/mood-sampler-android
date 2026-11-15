@@ -9,6 +9,7 @@ import dev.russell.moodsampler.data.backup.CategoryDto
 import dev.russell.moodsampler.data.backup.PromptDto
 import dev.russell.moodsampler.data.backup.SampleActivityDto
 import dev.russell.moodsampler.data.backup.SampleDto
+import dev.russell.moodsampler.data.backup.SampleEmotionDto
 import dev.russell.moodsampler.data.backup.SamplePainDto
 import dev.russell.moodsampler.data.backup.SampleTagDto
 import dev.russell.moodsampler.data.backup.SettingsDto
@@ -57,18 +58,20 @@ class BackupImportTest {
                 CategoryDto(41, "ACTIVITY", "Work", 1, false),
                 CategoryDto(42, "ACTIVITY", "Music", 2, false),
                 CategoryDto(43, "PAIN", "Headache", 1, false),
+                CategoryDto(44, "EMOTION", "Calm", 1, false),
             ),
             prompts = listOf(PromptDto(900, 5_000, "2026-08-15", 0, "ANSWERED", 5_000, 5_100)),
             samples = listOf(SampleDto(77, 900, 7f, 4f, 2, null, null, "hi", 5_100)),
             sampleActivities = listOf(SampleActivityDto(77, 41), SampleActivityDto(77, 42)),
             samplePainTypes = listOf(SamplePainDto(77, 43)),
             sampleTags = listOf(SampleTagDto(77, "deadline")),
+            sampleEmotions = listOf(SampleEmotionDto(77, 44)),
         )
 
         db.replaceTables(backup)
 
         assertThat(db.categoryDao().getAll().map { it.id to it.label })
-            .containsExactly(41L to "Work", 42L to "Music", 43L to "Headache")
+            .containsExactly(41L to "Work", 42L to "Music", 43L to "Headache", 44L to "Calm")
         assertThat(db.scheduledPromptDao().getAll().map { it.id }).containsExactly(900L)
         val restored = db.sampleDao().byPromptId(900)!!
         assertThat(restored.sample.id).isEqualTo(77)
@@ -76,6 +79,7 @@ class BackupImportTest {
         assertThat(restored.activityIds).containsExactly(41L, 42L)
         assertThat(restored.painTypeIds).containsExactly(43L)
         assertThat(restored.tags).containsExactly("deadline")
+        assertThat(restored.emotionIds).containsExactly(44L)
     }
 
     @Test
@@ -94,5 +98,8 @@ class BackupImportTest {
         val pain = db.categoryDao().byType(CategoryType.PAIN)
         assertThat(pain.map { it.label }).containsExactlyElementsIn(DefaultCategories.PAIN_TYPES).inOrder()
         assertThat(pain.none { it.id == 41L }).isTrue()
+        // A pre-v10 backup gains the emotions too.
+        val emotions = db.categoryDao().byType(CategoryType.EMOTION)
+        assertThat(emotions.map { it.label }).containsExactlyElementsIn(DefaultCategories.EMOTIONS).inOrder()
     }
 }

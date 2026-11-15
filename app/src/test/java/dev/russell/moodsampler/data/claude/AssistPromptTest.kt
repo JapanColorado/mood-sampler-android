@@ -13,6 +13,7 @@ class AssistPromptTest {
         activities = listOf("Work", "Reading", "Commuting", "Meals"),
         company = listOf("Alone", "Partner", "Friends"),
         painTypes = listOf("Headache", "Back"),
+        emotions = listOf("Calm", "Anxious", "Tired", "Happy"),
     )
 
     @Test
@@ -24,6 +25,7 @@ class AssistPromptTest {
                 activities = listOf("READING"),
                 company = " alone ",
                 painTypes = listOf("headache"),
+                emotions = listOf("anxious", "TIRED"),
             ),
             options,
         )
@@ -32,6 +34,7 @@ class AssistPromptTest {
         assertThat(picks.activities).containsExactly("Reading")
         assertThat(picks.company).isEqualTo("Alone")
         assertThat(picks.painTypes).containsExactly("Headache")
+        assertThat(picks.emotions).containsExactly("Anxious", "Tired").inOrder()
     }
 
     @Test
@@ -41,12 +44,14 @@ class AssistPromptTest {
                 place = "Grandma's  house",
                 activities = listOf("Reading", "Gardening", "Knitting", "Baking"),
                 painTypes = listOf("Sciatica", "Shin splints"),
+                emotions = listOf("Nostalgic", "Wistful", "Calm"),
             ),
             options,
         )
         assertThat(picks.place).isEqualTo("Grandma's house")  // whitespace collapsed
         assertThat(picks.activities).containsExactly("Reading", "Gardening", "Knitting").inOrder()
         assertThat(picks.painTypes).containsExactly("Sciatica")
+        assertThat(picks.emotions).containsExactly("Nostalgic", "Calm").inOrder()
     }
 
     @Test
@@ -61,9 +66,19 @@ class AssistPromptTest {
     }
 
     @Test
+    fun emotionsAreCappedAtThree() {
+        val picks = AssistPrompt.clean(AssistReply(emotions = listOf("Calm", "Happy", "Tired", "Anxious")), options)
+        assertThat(picks.emotions).containsExactly("Calm", "Happy", "Tired").inOrder()
+    }
+
+    @Test
     fun tagsAreNormalisedAndSkipWhatTheFieldsAlreadySay() {
         val picks = AssistPrompt.clean(
-            AssistReply(activities = listOf("Reading"), tags = listOf("#Coffee", "reading", " Deadline ", "coffee", "")),
+            AssistReply(
+                activities = listOf("Reading"),
+                emotions = listOf("Tired"),
+                tags = listOf("#Coffee", "reading", " Deadline ", "coffee", "", "tired"),
+            ),
             options,
         )
         assertThat(picks.tags).containsExactly("coffee", "deadline").inOrder()
@@ -78,10 +93,15 @@ class AssistPromptTest {
     fun parseReadsTheSchemaShapeIncludingNulls() {
         val reply = AssistPrompt.parse(
             """{"summary":"Commuting, tired.","place":null,"activities":["Commuting"],"company":null,
-                "pain_types":[],"tags":["rain"]}"""
+                "pain_types":[],"emotions":["Tired"],"tags":["rain"]}"""
         )
         assertThat(reply).isEqualTo(
-            AssistReply(summary = "Commuting, tired.", activities = listOf("Commuting"), tags = listOf("rain"))
+            AssistReply(
+                summary = "Commuting, tired.",
+                activities = listOf("Commuting"),
+                emotions = listOf("Tired"),
+                tags = listOf("rain"),
+            )
         )
     }
 
@@ -112,6 +132,7 @@ class AssistPromptTest {
         assertThat(text).contains("Local time: Tuesday 08:05")
         assertThat(text).contains("Places: Home; Work; Café / restaurant")
         assertThat(text).contains("Pain types: Headache; Back")
+        assertThat(text).contains("Emotions: Calm; Anxious; Tired; Happy")
         assertThat(text).contains("Phone guess for place: Work")
         assertThat(text).doesNotContain("Phone guess for company")
         assertThat(text).contains("<narration>\nStuck on the train again.\n</narration>")

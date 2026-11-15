@@ -14,6 +14,7 @@ data class AssistOptions(
     val activities: List<String>,
     val company: List<String>,
     val painTypes: List<String>,
+    val emotions: List<String> = emptyList(),
 )
 
 /** What Claude returns, shaped by [AssistPrompt.SCHEMA]. */
@@ -24,6 +25,7 @@ data class AssistReply(
     val activities: List<String> = emptyList(),
     val company: String? = null,
     @SerialName("pain_types") val painTypes: List<String> = emptyList(),
+    val emotions: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
 )
 
@@ -37,12 +39,13 @@ data class AssistPicks(
     val activities: List<String>,
     val company: String?,
     val painTypes: List<String>,
+    val emotions: List<String> = emptyList(),
     val tags: List<String>,
 )
 
 /**
  * Pure prompt building and reply cleanup for capture assist (unit-tested). Claude fills
- * the context — place, activities, company, pain types — plus a summary and tags; the
+ * the context — place, activities, company, pain types, emotions — plus a summary and tags; the
  * mood scales and the pain number always stay the user's own ratings.
  */
 object AssistPrompt {
@@ -50,10 +53,11 @@ object AssistPrompt {
     const val SYSTEM = """You help someone fill in a mood-journal entry. The app prompted them at a random moment, and they described what they're doing, thinking and feeling, sometimes with a photo. Turn that into the entry's fields.
 
 - summary: one short sentence (at most 20 words) in the first person, saying what they're doing and how they feel. Plain and factual, no advice.
-- place, activities, company, pain_types: choose from the listed options and copy their labels exactly. Use a new label only when nothing listed fits and the narration or photo clearly says so; keep it to 1–3 words in the same style as the listed ones. Leave a field null or empty when it isn't stated or clearly implied. Don't guess. (company has its own, looser rule below.)
+- place, activities, company, pain_types, emotions: choose from the listed options and copy their labels exactly. Use a new label only when nothing listed fits and the narration or photo clearly says so; keep it to 1–3 words in the same style as the listed ones. Leave a field null or empty when it isn't stated or clearly implied. Don't guess. (company has its own, looser rule below.)
 - place is where they are right now. activities can be several things they're doing at once.
 - company is who they're with right now. Fill it on any hint in the narration or photo, even in passing ("my wife just said", "dinner with the kids", people sharing the scene in a photo), using the closest option (a sister is family, a boss is a coworker). Use "Alone" if they suggest nobody is around. Someone they're only thinking about or texting doesn't count. If they're with several people, choose who they're mainly with. Leave it null only when there's no hint either way.
 - pain_types: only when they mention physical pain or discomfort.
+- emotions: up to 3 feelings they express or clearly convey right now, in words or tone ("ugh, this again" is frustrated). Leave it empty when the narration is purely factual; don't infer feelings from the activity alone.
 - tags: 0–5 short lowercase tags for notable themes the other fields don't already capture (for example "deadline", "coffee", "rain", "argument").
 - Never rate mood, energy or pain intensity; the person does that themselves.
 - A place marked as a phone guess came from GPS: keep it unless the narration says otherwise.
@@ -73,9 +77,10 @@ object AssistPrompt {
             "activities" to STRING_ARRAY,
             "company" to NULLABLE_STRING,
             "pain_types" to STRING_ARRAY,
+            "emotions" to STRING_ARRAY,
             "tags" to STRING_ARRAY,
         ),
-        "required" to listOf("summary", "place", "activities", "company", "pain_types", "tags"),
+        "required" to listOf("summary", "place", "activities", "company", "pain_types", "emotions", "tags"),
     )
 
     /** The user turn's text: local time, the option lists, the phone's guesses and the narration. */
@@ -93,6 +98,7 @@ object AssistPrompt {
         appendLine("Activities: ${options.activities.joinToString("; ")}")
         appendLine("Company: ${options.company.joinToString("; ")}")
         appendLine("Pain types: ${options.painTypes.joinToString("; ")}")
+        appendLine("Emotions: ${options.emotions.joinToString("; ")}")
         if (guessedPlace != null) appendLine("Phone guess for place: $guessedPlace")
         if (guessedCompany != null) appendLine("Phone guess for company: $guessedCompany")
         appendLine()
@@ -119,13 +125,15 @@ object AssistPrompt {
         val company = reply.company?.let { snap(it, options.company) }
         val activities = snapAll(reply.activities, options.activities, MAX_NEW_ACTIVITIES).take(MAX_ACTIVITIES)
         val painTypes = snapAll(reply.painTypes, options.painTypes, MAX_NEW_PAIN_TYPES)
-        val taken = (listOfNotNull(place, company) + activities + painTypes).map { it.lowercase() }.toSet()
+        val emotions = snapAll(reply.emotions, options.emotions, MAX_NEW_EMOTIONS).take(MAX_EMOTIONS)
+        val taken = (listOfNotNull(place, company) + activities + painTypes + emotions).map { it.lowercase() }.toSet()
         return AssistPicks(
             summary = reply.summary.trim().take(MAX_SUMMARY).ifEmpty { null },
             place = place,
             activities = activities,
             company = company,
             painTypes = painTypes,
+            emotions = emotions,
             tags = Tags.normalize(reply.tags).filter { it !in taken },
         )
     }
@@ -156,4 +164,6 @@ object AssistPrompt {
     private const val MAX_ACTIVITIES = 6
     private const val MAX_NEW_ACTIVITIES = 2
     private const val MAX_NEW_PAIN_TYPES = 1
+    private const val MAX_EMOTIONS = 3
+    private const val MAX_NEW_EMOTIONS = 1
 }

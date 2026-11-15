@@ -8,6 +8,7 @@ import dev.russell.moodsampler.data.db.DefaultCategories
 import dev.russell.moodsampler.data.db.PromptStatus
 import dev.russell.moodsampler.data.db.SampleActivityCrossRef
 import dev.russell.moodsampler.data.db.SampleDeviceEntity
+import dev.russell.moodsampler.data.db.SampleEmotionCrossRef
 import dev.russell.moodsampler.data.db.SampleEntity
 import dev.russell.moodsampler.data.db.SamplePainCrossRef
 import dev.russell.moodsampler.data.db.SampleTagEntity
@@ -42,6 +43,8 @@ data class Backup(
     val samplePainTypes: List<SamplePainDto> = emptyList(),
     /** Claude's free-form tags per sample (schema v9); absent in older backups. */
     val sampleTags: List<SampleTagDto> = emptyList(),
+    /** Emotions per sample (schema v10); absent in older backups. */
+    val sampleEmotions: List<SampleEmotionDto> = emptyList(),
 ) {
     companion object {
         const val FORMAT = 1
@@ -126,6 +129,9 @@ data class SampleDeviceDto(val sampleId: Long, val deviceHash: String)
 data class SamplePainDto(val sampleId: Long, val categoryId: Long)
 
 @Serializable
+data class SampleEmotionDto(val sampleId: Long, val categoryId: Long)
+
+@Serializable
 data class SampleTagDto(val sampleId: Long, val tag: String)
 
 class BackupFormatException(message: String) : Exception(message)
@@ -175,15 +181,20 @@ fun CategoryDto.toEntity(schemaVersion: Int = AppDatabase.VERSION): CategoryEnti
 }
 
 /**
- * Default categories a pre-v9 backup predates — the pain types, mirroring MIGRATION_8_9 —
- * as new rows (id 0, so the database assigns one) to insert after the backup's own.
+ * Default categories the backup predates — pain types before v9 (mirroring MIGRATION_8_9)
+ * and emotions before v10 (mirroring MIGRATION_9_10) — as new rows (id 0, so the database
+ * assigns one) to insert after the backup's own.
  */
-fun Backup.missingDefaultCategories(): List<CategoryEntity> {
-    if (schemaVersion >= 9) return emptyList()
-    val have = categories.filter { it.type == CategoryType.PAIN.name }.map { it.label.lowercase() }.toSet()
-    val start = categories.filter { it.type == CategoryType.PAIN.name }.maxOfOrNull { it.sortOrder } ?: 0
-    return DefaultCategories.PAIN_TYPES.filter { it.lowercase() !in have }
-        .mapIndexed { i, label -> CategoryEntity(type = CategoryType.PAIN, label = label, sortOrder = start + i + 1) }
+fun Backup.missingDefaultCategories(): List<CategoryEntity> =
+    (if (schemaVersion < 9) missingDefaults(CategoryType.PAIN, DefaultCategories.PAIN_TYPES) else emptyList()) +
+        (if (schemaVersion < 10) missingDefaults(CategoryType.EMOTION, DefaultCategories.EMOTIONS) else emptyList())
+
+private fun Backup.missingDefaults(type: CategoryType, defaults: List<String>): List<CategoryEntity> {
+    val own = categories.filter { it.type == type.name }
+    val have = own.map { it.label.lowercase() }.toSet()
+    val start = own.maxOfOrNull { it.sortOrder } ?: 0
+    return defaults.filter { it.lowercase() !in have }
+        .mapIndexed { i, label -> CategoryEntity(type = type, label = label, sortOrder = start + i + 1) }
 }
 
 fun ScheduledPromptEntity.toDto() = PromptDto(
@@ -218,6 +229,9 @@ fun SampleDeviceDto.toEntity() = SampleDeviceEntity(sampleId, deviceHash)
 
 fun SamplePainCrossRef.toDto() = SamplePainDto(sampleId, categoryId)
 fun SamplePainDto.toEntity() = SamplePainCrossRef(sampleId, categoryId)
+
+fun SampleEmotionCrossRef.toDto() = SampleEmotionDto(sampleId, categoryId)
+fun SampleEmotionDto.toEntity() = SampleEmotionCrossRef(sampleId, categoryId)
 
 fun SampleTagEntity.toDto() = SampleTagDto(sampleId, tag)
 fun SampleTagDto.toEntity() = SampleTagEntity(sampleId, tag)

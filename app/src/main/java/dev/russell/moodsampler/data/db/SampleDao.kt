@@ -13,7 +13,7 @@ data class GeoTag(val locationId: Long, val latitude: Double, val longitude: Dou
 /** One device seen with a past answer that named its company — the training set for company suggestions. */
 data class DeviceTag(val sampleId: Long, val socialId: Long, val deviceHash: String)
 
-/** How many samples reference a category (activities and pain types via join tables, place/company directly). */
+/** How many samples reference a category (activities, pain types and emotions via join tables, place/company directly). */
 data class CategoryUsage(val categoryId: Long, val n: Int)
 
 @Dao
@@ -65,6 +65,15 @@ interface SampleDao {
     @Query("DELETE FROM sample_pain WHERE sampleId = :sampleId")
     suspend fun deletePainTypes(sampleId: Long)
 
+    @Query("SELECT * FROM sample_emotion ORDER BY sampleId, categoryId")
+    suspend fun getAllEmotions(): List<SampleEmotionCrossRef>
+
+    @Insert
+    suspend fun insertEmotions(refs: List<SampleEmotionCrossRef>)
+
+    @Query("DELETE FROM sample_emotion WHERE sampleId = :sampleId")
+    suspend fun deleteEmotions(sampleId: Long)
+
     @Query("SELECT * FROM sample_tag ORDER BY sampleId, tag")
     suspend fun getAllTags(): List<SampleTagEntity>
 
@@ -78,6 +87,8 @@ interface SampleDao {
         """SELECT categoryId, COUNT(*) AS n FROM sample_activity GROUP BY categoryId
            UNION ALL
            SELECT categoryId, COUNT(*) AS n FROM sample_pain GROUP BY categoryId
+           UNION ALL
+           SELECT categoryId, COUNT(*) AS n FROM sample_emotion GROUP BY categoryId
            UNION ALL
            SELECT locationId AS categoryId, COUNT(*) AS n FROM sample WHERE locationId IS NOT NULL GROUP BY locationId
            UNION ALL
@@ -117,6 +128,9 @@ interface SampleDao {
 
     @Query("DELETE FROM sample_pain")
     suspend fun deleteAllPainTypes()
+
+    @Query("DELETE FROM sample_emotion")
+    suspend fun deleteAllEmotions()
 
     @Query("DELETE FROM sample_tag")
     suspend fun deleteAllTags()

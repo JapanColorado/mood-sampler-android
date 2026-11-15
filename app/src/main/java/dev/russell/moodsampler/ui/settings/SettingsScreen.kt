@@ -142,6 +142,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
         CategoryEditorCard("Places", CategoryType.LOCATION, categoryGroups, usage, viewModel)
         CategoryEditorCard("Company", CategoryType.SOCIAL, categoryGroups, usage, viewModel)
         CategoryEditorCard("Pain types", CategoryType.PAIN, categoryGroups, usage, viewModel)
+        CategoryEditorCard("Emotions", CategoryType.EMOTION, categoryGroups, usage, viewModel)
 
         GroupLabel("Data")
         JournalCard {

@@ -24,6 +24,7 @@ import dev.russell.moodsampler.ui.components.JournalCard
 import dev.russell.moodsampler.ui.components.PillToggle
 import dev.russell.moodsampler.ui.components.ScreenTitle
 import dev.russell.moodsampler.ui.dashboard.charts.CategoryBars
+import dev.russell.moodsampler.ui.dashboard.charts.EmotionShareBars
 import dev.russell.moodsampler.ui.dashboard.charts.HourOfDayChart
 import dev.russell.moodsampler.ui.dashboard.charts.MoodTimeSeriesChart
 import dev.russell.moodsampler.ui.dashboard.charts.PainLevelChart
@@ -90,7 +91,15 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
             }
         }
 
-        // Breakdown measure: drives the hour chart and the three category sections.
+        Section("Feelings", "Share of answers naming each emotion") {
+            if (data.emotionShares.isNotEmpty()) {
+                EmotionShareBars(data.emotionShares)
+            } else {
+                SectionPlaceholder("No emotions picked yet.")
+            }
+        }
+
+        // Breakdown measure: drives the hour chart and the four category sections.
         Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Eyebrow("Break down by")
             PillToggle(
@@ -120,6 +129,9 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(factory = Dashboar
         }
         Section("By company", "Mean $word while with…") {
             CategoryBarsOrPlaceholder(data.bySocial, shown)
+        }
+        Section("By emotion", "Mean $word while feeling… (a sample counts under each emotion it named)") {
+            CategoryBarsOrPlaceholder(data.byEmotion, shown)
         }
     }
 }

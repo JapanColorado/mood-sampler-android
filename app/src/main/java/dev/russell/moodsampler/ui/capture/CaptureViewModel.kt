@@ -89,6 +89,7 @@ class CaptureViewModel(
     val locations = categories(CategoryType.LOCATION)
     val socials = categories(CategoryType.SOCIAL)
     val painTypes = categories(CategoryType.PAIN)
+    val emotions = categories(CategoryType.EMOTION)
 
     /** Whether a Claude API key is set, so the form can offer to fill itself in; null until known. */
     val assistAvailable: StateFlow<Boolean?> = assistant.available
@@ -200,6 +201,7 @@ class CaptureViewModel(
                 ),
                 activityIds = values.activityIds,
                 painTypeIds = values.painTypeIds,
+                emotionIds = values.emotionIds,
                 tags = values.tags,
                 deviceHashes = deviceHashes,
                 answeredAtMs = clock.millis(),

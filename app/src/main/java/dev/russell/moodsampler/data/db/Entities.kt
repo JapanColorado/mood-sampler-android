@@ -32,6 +32,9 @@ enum class CategoryType {
 
     /** Kind of pain (headache, back pain…), multi-select under the pain scale (schema v9). */
     PAIN,
+
+    /** Emotion felt (calm, anxious…), multi-select after the scales (schema v10). */
+    EMOTION,
 }
 
 @Entity(tableName = "scheduled_prompt", indices = [Index("localDate"), Index("status")])
@@ -138,6 +141,31 @@ data class SamplePainCrossRef(
     val categoryId: Long,
 )
 
+/** Many-to-many: the emotions a sample names (schema v10). */
+@Entity(
+    tableName = "sample_emotion",
+    primaryKeys = ["sampleId", "categoryId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SampleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sampleId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = CategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["categoryId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("categoryId")],
+)
+data class SampleEmotionCrossRef(
+    val sampleId: Long,
+    val categoryId: Long,
+)
+
 /** A free-form tag Claude attached to a sample, e.g. "deadline" (schema v9). Stored lower-case. */
 @Entity(
     tableName = "sample_tag",
@@ -190,7 +218,7 @@ data class CategoryEntity(
     @ColumnInfo(name = "groupKey") val group: String? = null,
 )
 
-/** A sample plus the ids of the activities and pain types it tagged, and its free-form tags. */
+/** A sample plus the ids of the activities, pain types and emotions it tagged, and its free-form tags. */
 data class SampleWithActivities(
     @Embedded val sample: SampleEntity,
     @Relation(
@@ -207,6 +235,13 @@ data class SampleWithActivities(
         projection = ["categoryId"],
     )
     val painTypeIds: List<Long> = emptyList(),
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "sampleId",
+        entity = SampleEmotionCrossRef::class,
+        projection = ["categoryId"],
+    )
+    val emotionIds: List<Long> = emptyList(),
     @Relation(
         parentColumn = "id",
         entityColumn = "sampleId",

@@ -20,6 +20,7 @@ data class AssistFill(
     val activityIds: List<Long>,
     val socialId: Long?,
     val painTypeIds: List<Long>,
+    val emotionIds: List<Long> = emptyList(),
 )
 
 /**
@@ -54,6 +55,7 @@ class CaptureAssistant(
             activities = active(CategoryType.ACTIVITY),
             company = active(CategoryType.SOCIAL),
             painTypes = active(CategoryType.PAIN),
+            emotions = active(CategoryType.EMOTION),
         )
         val labels = all.associate { it.id to it.label }
         val image = photo?.let { photos.jpegForUpload(it) }
@@ -80,6 +82,7 @@ class CaptureAssistant(
             activityIds = picks.activities.mapNotNull { idOf(CategoryType.ACTIVITY, it) },
             socialId = idOf(CategoryType.SOCIAL, picks.company),
             painTypeIds = picks.painTypes.mapNotNull { idOf(CategoryType.PAIN, it) },
+            emotionIds = picks.emotions.mapNotNull { idOf(CategoryType.EMOTION, it) },
         )
     }
 }
