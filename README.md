@@ -1,5 +1,7 @@
 # Mood Sampler
 
+A mood and time-use tracker that asks at random moments, so the data is honest. Signed APKs are on the [Releases page](https://github.com/JapanColorado/mood-sampler-android/releases).
+
 Android app for mood/time tracking via **random experience sampling** (ESM).
 The phone prompts you at random moments during waking hours; each prompt is a
 ~15-second capture (0–10 valence + energy taps, a 0–10 physical-pain rating,
@@ -254,3 +256,11 @@ pre-v9 backups gain the default pain types, and pre-v10 backups the default
 emotions.
 Photos are referenced by file name only, so a restore on the same phone keeps
 them; restored elsewhere, those answers have no photo.
+
+## How this was built
+
+Built with [Claude Code](https://claude.com/claude-code), and most commits say so. I decide what to make, write the specification, review the changes and use the result every day.
+
+## License
+
+[MIT](LICENSE)
